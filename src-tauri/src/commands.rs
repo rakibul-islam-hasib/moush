@@ -45,6 +45,7 @@ pub async fn update_settings(app: State<'_, Arc<App>>, handle: AppHandle, settin
     let theme = settings.theme.clone();
     let r = blocking(move || app.update_settings(settings)).await?;
     crate::apply_theme(&handle, &theme);
+    crate::apply_backdrop(&handle);
     Ok(r)
 }
 
@@ -160,6 +161,7 @@ pub async fn reset_settings(app: State<'_, Arc<App>>, handle: AppHandle) -> Res<
     let theme = defaults.theme.clone();
     let r = blocking(move || app.update_settings(defaults)).await?;
     crate::apply_theme(&handle, &theme);
+    crate::apply_backdrop(&handle);
     Ok(r)
 }
 

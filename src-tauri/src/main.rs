@@ -141,15 +141,33 @@ fn create_main_window(app: &AppHandle) {
         }
     };
     if let Some(state) = app.try_state::<Arc<App>>() {
-        // Native Mica backdrop on Windows 11; Windows 10 keeps an opaque window.
-        if state.platform.lock().unwrap().windows11 {
-            let ok = window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok();
-            state.platform.lock().unwrap().mica = ok;
-        }
+        // A new window starts without effects; apply Mica when the setting asks for it.
+        state.platform.lock().unwrap().mica = false;
+        apply_backdrop(app);
         apply_theme(app, &state.config().settings.theme);
     }
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+/// Applies or clears the native Mica backdrop to match `settings.appearance.transparency`
+/// (Windows 11 only; Windows 10 keeps an opaque window). `platform.mica` reports whether
+/// the backdrop is currently applied, so the UI only draws translucent surfaces over it.
+pub fn apply_backdrop(app: &AppHandle) {
+    let Some(state) = app.try_state::<Arc<App>>() else { return };
+    let Some(window) = app.get_webview_window("main") else { return };
+    let want = state.platform.lock().unwrap().windows11 && state.config().settings.appearance.transparency;
+    if want == state.platform.lock().unwrap().mica {
+        return;
+    }
+    let applied = if want {
+        window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok()
+    } else {
+        let _ = window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>);
+        false
+    };
+    state.platform.lock().unwrap().mica = applied;
+    state.notify();
 }
 
 pub fn apply_theme(app: &AppHandle, theme: &str) {

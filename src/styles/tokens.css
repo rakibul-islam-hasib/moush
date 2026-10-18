@@ -1,161 +1,304 @@
-/* Windows 11 (WinUI 3) design tokens. Light is the default; dark via html[data-theme="dark"]. */
+/*
+ * Moush design tokens.
+ *
+ * Layers:   window (--bg) > content layer (--layer) > cards (--card) > controls (--control)
+ * Themes:   light is the default; html[data-theme="dark"] for dark; forced-colors for high contrast.
+ * Surfaces: opaque by default; html.mica makes the window and layers translucent over the native
+ *           Mica backdrop (only when the backdrop is really applied and transparency is on).
+ * Motion:   html[data-motion="reduce"] removes movement (see base.css).
+ */
 
 :root {
   color-scheme: light;
 
-  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  /* ---- Typography ramp (Segoe UI Variable with system fallbacks) */
+  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
   --fs-caption: 12px;
+  --lh-caption: 16px;
   --fs-body: 14px;
+  --lh-body: 20px;
+  --fs-body-large: 16px;
+  --lh-body-large: 22px;
   --fs-subtitle: 20px;
+  --lh-subtitle: 28px;
   --fs-title: 28px;
+  --lh-title: 36px;
+  --fs-display: 40px;
+  --lh-display: 52px;
+  --fw-regular: 400;
+  --fw-strong: 600;
 
-  --radius-control: 4px;
-  --radius-card: 8px;
-  --dur-fast: 83ms;
-  --dur: 167ms;
-  --ease: cubic-bezier(0, 0, 0, 1);
+  /* ---- Spacing scale (4 px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 
-  /* Surfaces */
-  --bg: #f3f3f3;
-  --layer: rgba(255, 255, 255, 0.5);
-  --layer-stroke: rgba(0, 0, 0, 0.0578);
-  --card: rgba(255, 255, 255, 0.7);
-  --card-hover: rgba(249, 249, 249, 0.5);
-  --card-pressed: rgba(249, 249, 249, 0.3);
-  --card-stroke: rgba(0, 0, 0, 0.0578);
-  --divider: rgba(0, 0, 0, 0.0803);
+  /* ---- Radii */
+  --radius-sm: 4px; /* controls */
+  --radius-md: 8px; /* cards */
+  --radius-lg: 12px; /* hero, dialogs */
+  --radius-pill: 999px;
+  /* Legacy aliases used by older rules. */
+  --radius-control: var(--radius-sm);
+  --radius-card: var(--radius-md);
+
+  /* ---- Motion (every duration stays at or below 200 ms) */
+  --dur-fast: 90ms;
+  --dur: 150ms;
+  --dur-slow: 200ms;
+  --ease: cubic-bezier(0.1, 0.9, 0.2, 1); /* decelerate */
+  --ease-in-out: cubic-bezier(0.55, 0, 0.3, 1);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.6, 1);
+
+  /* ---- Layout */
+  --nav-expanded: 252px;
+  --nav-compact: 52px;
+  --page-max: 1000px;
+
+  /* ---- Brand */
+  --brand-1: #5b4ff0;
+  --brand-2: #1fb6c9;
+  --brand-gradient: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+
+  /* ---- Surfaces (opaque) */
+  --bg: #eef0f5;
+  --layer: #f7f8fb;
+  --layer-stroke: rgba(20, 24, 48, 0.07);
+  --card: #ffffff;
+  --card-hover: #fafbfd;
+  --card-pressed: #f4f5f9;
+  --card-stroke: rgba(20, 24, 48, 0.085);
+  --card-inset: rgba(20, 24, 48, 0.035);
+  --divider: rgba(20, 24, 48, 0.08);
   --dialog-bg: #ffffff;
-  --dialog-footer: #f3f3f3;
-  --flyout-bg: #fcfcfc;
-  --surface-stroke: rgba(117, 117, 117, 0.4);
+  --dialog-footer: #f3f4f8;
+  --flyout-bg: #ffffff;
+  --surface-stroke: rgba(20, 24, 48, 0.16);
+  --smoke: rgba(12, 14, 28, 0.32);
 
-  /* Controls */
-  --control: rgba(255, 255, 255, 0.7);
-  --control-hover: rgba(249, 249, 249, 0.5);
-  --control-pressed: rgba(249, 249, 249, 0.3);
-  --control-disabled: rgba(249, 249, 249, 0.3);
+  /* ---- Controls */
+  --control: rgba(255, 255, 255, 0.9);
+  --control-hover: #f8f9fc;
+  --control-pressed: #f2f3f7;
+  --control-disabled: rgba(245, 246, 250, 0.6);
   --control-input-active: #ffffff;
-  --control-stroke: rgba(0, 0, 0, 0.0578);
-  --control-stroke-bottom: rgba(0, 0, 0, 0.1622);
-  --control-strong-stroke: rgba(0, 0, 0, 0.4458);
-  --control-strong-fill: rgba(0, 0, 0, 0.4458);
-  --control-alt: rgba(0, 0, 0, 0.0241);
-  --control-alt-hover: rgba(0, 0, 0, 0.0578);
+  --control-stroke: rgba(20, 24, 48, 0.1);
+  --control-stroke-bottom: rgba(20, 24, 48, 0.2);
+  --control-strong-stroke: rgba(20, 24, 48, 0.48);
+  --control-strong-fill: rgba(20, 24, 48, 0.46);
+  --control-alt: rgba(20, 24, 48, 0.03);
+  --control-alt-hover: rgba(20, 24, 48, 0.065);
   --control-solid: #ffffff;
-  --subtle-hover: rgba(0, 0, 0, 0.0373);
-  --subtle-pressed: rgba(0, 0, 0, 0.0241);
+  --subtle-hover: rgba(20, 24, 48, 0.05);
+  --subtle-pressed: rgba(20, 24, 48, 0.035);
+  --track: rgba(20, 24, 48, 0.12);
 
-  /* Text */
-  --text: rgba(0, 0, 0, 0.8956);
-  --text-secondary: rgba(0, 0, 0, 0.6063);
-  --text-tertiary: rgba(0, 0, 0, 0.4458);
-  --text-disabled: rgba(0, 0, 0, 0.3614);
+  /* ---- Text (contrast on --card: primary 15:1, secondary 6:1) */
+  --text: #161826;
+  --text-secondary: #565a6e;
+  --text-tertiary: #7a7e92;
+  --text-disabled: rgba(22, 24, 38, 0.38);
 
-  /* Accent */
-  --accent: #005fb8;
-  --accent-hover: rgba(0, 95, 184, 0.9);
-  --accent-pressed: rgba(0, 95, 184, 0.8);
-  --accent-disabled: rgba(0, 0, 0, 0.2169);
-  --accent-text: #005fb8;
-  --accent-subtle: rgba(0, 95, 184, 0.1);
-  --accent-stroke: rgba(255, 255, 255, 0.08);
-  --accent-stroke-bottom: rgba(0, 0, 0, 0.4);
+  /* ---- Accent (indigo; 6.6:1 on white) */
+  --accent: #4f43dd;
+  --accent-hover: #5a4fe6;
+  --accent-pressed: #463bc7;
+  --accent-disabled: rgba(20, 24, 48, 0.2);
+  --accent-text: #4136c4;
+  --accent-subtle: rgba(79, 67, 221, 0.09);
+  --accent-subtle-strong: rgba(79, 67, 221, 0.16);
+  --accent-stroke: rgba(255, 255, 255, 0.1);
+  --accent-stroke-bottom: rgba(0, 0, 0, 0.35);
   --on-accent: #ffffff;
-  --on-accent-secondary: rgba(255, 255, 255, 0.7);
+  --on-accent-secondary: rgba(255, 255, 255, 0.78);
   --on-accent-disabled: #ffffff;
 
-  /* Status */
-  --success: #0f7b0f;
-  --success-bg: #dff6dd;
-  --caution: #9d5d00;
-  --caution-bg: #fff4ce;
-  --critical: #c42b1c;
-  --critical-bg: #fde7e9;
-  --attention-bg: rgba(246, 246, 246, 0.5);
-  --neutral: rgba(0, 0, 0, 0.4458);
+  /* ---- Semantic status (text colours pass 4.5:1 on their -bg and on --card) */
+  --success: #13743a;
+  --success-bg: #e2f5e7;
+  --caution: #8a5300;
+  --caution-bg: #fff2d1;
+  --critical: #b8261a;
+  --critical-bg: #fde8e7;
+  --info: var(--accent-text);
+  --info-bg: #eceafd;
+  --attention-bg: #f1f2f7;
+  --neutral: #8a8ea2;
 
-  /* Effects */
-  --shadow-dialog: 0 32px 64px rgba(0, 0, 0, 0.1876), 0 2px 21px rgba(0, 0, 0, 0.1474);
-  --shadow-flyout: 0 8px 16px rgba(0, 0, 0, 0.14);
-  --focus-outer: rgba(0, 0, 0, 0.8956);
+  /* ---- Elevation */
+  --elev-1: 0 1px 2px rgba(20, 24, 48, 0.05);
+  --elev-2: 0 4px 12px rgba(20, 24, 48, 0.08), 0 1px 3px rgba(20, 24, 48, 0.06);
+  --elev-3: 0 12px 32px rgba(20, 24, 48, 0.16), 0 2px 8px rgba(20, 24, 48, 0.08);
+  --elev-4: 0 28px 64px rgba(20, 24, 48, 0.24), 0 4px 16px rgba(20, 24, 48, 0.12);
+  --shadow-dialog: var(--elev-4);
+  --shadow-flyout: var(--elev-3);
+
+  /* ---- Focus */
+  --focus-outer: #161826;
   --focus-inner: #ffffff;
 
-  /* Layout editor */
-  --lc-bg: rgba(0, 0, 0, 0.0241);
+  /* ---- Layout editor */
+  --lc-bg: rgba(20, 24, 48, 0.03);
   --lc-host-fill: #ffffff;
-  --lc-client-monitor: rgba(255, 255, 255, 0.85);
+  --lc-client-monitor: rgba(255, 255, 255, 0.88);
+
+  /* ---- Hero art */
+  --hero-glow: rgba(79, 67, 221, 0.12);
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #202020;
-  --layer: rgba(58, 58, 58, 0.3);
-  --layer-stroke: rgba(0, 0, 0, 0.1);
-  --card: rgba(255, 255, 255, 0.0512);
-  --card-hover: rgba(255, 255, 255, 0.0837);
-  --card-pressed: rgba(255, 255, 255, 0.0326);
-  --card-stroke: rgba(255, 255, 255, 0.0837);
-  --divider: rgba(255, 255, 255, 0.0837);
-  --dialog-bg: #2b2b2b;
-  --dialog-footer: #202020;
-  --flyout-bg: #2c2c2c;
-  --surface-stroke: rgba(117, 117, 117, 0.4);
+  --brand-1: #8b80ff;
+  --brand-2: #45d3e3;
 
-  --control: rgba(255, 255, 255, 0.0605);
-  --control-hover: rgba(255, 255, 255, 0.0837);
-  --control-pressed: rgba(255, 255, 255, 0.0326);
-  --control-disabled: rgba(255, 255, 255, 0.0419);
-  --control-input-active: #1e1e1e;
-  --control-stroke: rgba(255, 255, 255, 0.0698);
-  --control-stroke-bottom: rgba(255, 255, 255, 0.0465);
-  --control-strong-stroke: rgba(255, 255, 255, 0.5442);
-  --control-strong-fill: rgba(255, 255, 255, 0.5442);
-  --control-alt: rgba(0, 0, 0, 0.1);
-  --control-alt-hover: rgba(255, 255, 255, 0.0419);
-  --control-solid: #454545;
-  --subtle-hover: rgba(255, 255, 255, 0.0605);
-  --subtle-pressed: rgba(255, 255, 255, 0.0419);
+  --bg: #131419;
+  --layer: #191a21;
+  --layer-stroke: rgba(255, 255, 255, 0.06);
+  --card: #20212a;
+  --card-hover: #252631;
+  --card-pressed: #1d1e26;
+  --card-stroke: rgba(255, 255, 255, 0.075);
+  --card-inset: rgba(0, 0, 0, 0.18);
+  --divider: rgba(255, 255, 255, 0.075);
+  --dialog-bg: #23242e;
+  --dialog-footer: #1b1c24;
+  --flyout-bg: #262732;
+  --surface-stroke: rgba(255, 255, 255, 0.12);
+  --smoke: rgba(0, 0, 0, 0.5);
 
-  --text: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.786);
-  --text-tertiary: rgba(255, 255, 255, 0.5442);
-  --text-disabled: rgba(255, 255, 255, 0.3628);
+  --control: rgba(255, 255, 255, 0.06);
+  --control-hover: rgba(255, 255, 255, 0.09);
+  --control-pressed: rgba(255, 255, 255, 0.04);
+  --control-disabled: rgba(255, 255, 255, 0.04);
+  --control-input-active: #15161c;
+  --control-stroke: rgba(255, 255, 255, 0.08);
+  --control-stroke-bottom: rgba(255, 255, 255, 0.05);
+  --control-strong-stroke: rgba(255, 255, 255, 0.55);
+  --control-strong-fill: rgba(255, 255, 255, 0.5);
+  --control-alt: rgba(0, 0, 0, 0.14);
+  --control-alt-hover: rgba(255, 255, 255, 0.05);
+  --control-solid: #4a4b58;
+  --subtle-hover: rgba(255, 255, 255, 0.06);
+  --subtle-pressed: rgba(255, 255, 255, 0.04);
+  --track: rgba(255, 255, 255, 0.14);
 
-  --accent: #60cdff;
-  --accent-hover: rgba(96, 205, 255, 0.9);
-  --accent-pressed: rgba(96, 205, 255, 0.8);
-  --accent-disabled: rgba(255, 255, 255, 0.1581);
-  --accent-text: #99ebff;
-  --accent-subtle: rgba(96, 205, 255, 0.12);
-  --accent-stroke: rgba(255, 255, 255, 0.08);
-  --accent-stroke-bottom: rgba(0, 0, 0, 0.14);
-  --on-accent: #000000;
-  --on-accent-secondary: rgba(0, 0, 0, 0.5);
-  --on-accent-disabled: rgba(255, 255, 255, 0.5302);
+  --text: #f3f3f7;
+  --text-secondary: #b5b7c6;
+  --text-tertiary: #8b8ea0;
+  --text-disabled: rgba(243, 243, 247, 0.36);
 
-  --success: #6ccb5f;
-  --success-bg: #393d1b;
-  --caution: #fce100;
-  --caution-bg: #433519;
-  --critical: #ff99a4;
-  --critical-bg: #442726;
-  --attention-bg: rgba(255, 255, 255, 0.0326);
-  --neutral: rgba(255, 255, 255, 0.5442);
+  --accent: #a39cff;
+  --accent-hover: #b0aaff;
+  --accent-pressed: #958dff;
+  --accent-disabled: rgba(255, 255, 255, 0.16);
+  --accent-text: #bcb6ff;
+  --accent-subtle: rgba(163, 156, 255, 0.12);
+  --accent-subtle-strong: rgba(163, 156, 255, 0.2);
+  --accent-stroke: rgba(255, 255, 255, 0.1);
+  --accent-stroke-bottom: rgba(0, 0, 0, 0.2);
+  --on-accent: #12102e;
+  --on-accent-secondary: rgba(18, 16, 46, 0.7);
+  --on-accent-disabled: rgba(255, 255, 255, 0.5);
 
-  --shadow-dialog: 0 32px 64px rgba(0, 0, 0, 0.37), 0 2px 21px rgba(0, 0, 0, 0.37);
-  --shadow-flyout: 0 8px 16px rgba(0, 0, 0, 0.26);
+  --success: #74d68f;
+  --success-bg: rgba(116, 214, 143, 0.12);
+  --caution: #f3c45a;
+  --caution-bg: rgba(243, 196, 90, 0.12);
+  --critical: #ff9c94;
+  --critical-bg: rgba(255, 156, 148, 0.12);
+  --info-bg: rgba(163, 156, 255, 0.12);
+  --attention-bg: rgba(255, 255, 255, 0.04);
+  --neutral: #8b8ea0;
+
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --elev-2: 0 4px 12px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.24);
+  --elev-3: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --elev-4: 0 28px 64px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.35);
+
   --focus-outer: #ffffff;
-  --focus-inner: rgba(0, 0, 0, 0.7);
+  --focus-inner: #000000;
 
-  --lc-bg: rgba(0, 0, 0, 0.12);
-  --lc-host-fill: rgba(255, 255, 255, 0.08);
+  --lc-bg: rgba(0, 0, 0, 0.16);
+  --lc-host-fill: rgba(255, 255, 255, 0.07);
   --lc-client-monitor: rgba(255, 255, 255, 0.06);
+
+  --hero-glow: rgba(163, 156, 255, 0.14);
 }
 
-/* Native Mica backdrop: let it show through; surfaces are already translucent. */
+/*
+ * Translucent surfaces over the native Mica backdrop. Restrained: the window shows Mica,
+ * the content layer and cards keep enough opacity for text contrast.
+ */
 html.mica {
   --bg: transparent;
+  --layer: rgba(255, 255, 255, 0.5);
+  --card: rgba(255, 255, 255, 0.78);
+  --card-hover: rgba(255, 255, 255, 0.66);
+  --card-pressed: rgba(255, 255, 255, 0.5);
+  --attention-bg: rgba(255, 255, 255, 0.55);
+}
+
+html.mica[data-theme="dark"] {
+  --layer: rgba(30, 31, 40, 0.42);
+  --card: rgba(255, 255, 255, 0.05);
+  --card-hover: rgba(255, 255, 255, 0.08);
+  --card-pressed: rgba(255, 255, 255, 0.035);
+  --attention-bg: rgba(255, 255, 255, 0.035);
+}
+
+/* High contrast (Windows contrast themes): system colours, visible borders, no translucency. */
+@media (forced-colors: active) {
+  :root,
+  html[data-theme="dark"],
+  html.mica,
+  html.mica[data-theme="dark"] {
+    --bg: Canvas;
+    --layer: Canvas;
+    --card: Canvas;
+    --card-hover: Canvas;
+    --card-pressed: Canvas;
+    --card-stroke: CanvasText;
+    --layer-stroke: CanvasText;
+    --divider: CanvasText;
+    --dialog-bg: Canvas;
+    --dialog-footer: Canvas;
+    --flyout-bg: Canvas;
+    --control: ButtonFace;
+    --control-hover: ButtonFace;
+    --control-stroke: ButtonText;
+    --control-stroke-bottom: ButtonText;
+    --control-strong-stroke: ButtonText;
+    --control-strong-fill: ButtonText;
+    --text: CanvasText;
+    --text-secondary: CanvasText;
+    --text-tertiary: GrayText;
+    --text-disabled: GrayText;
+    --accent: Highlight;
+    --accent-hover: Highlight;
+    --accent-pressed: Highlight;
+    --accent-text: LinkText;
+    --accent-subtle: Canvas;
+    --accent-subtle-strong: Canvas;
+    --on-accent: HighlightText;
+    --success: CanvasText;
+    --caution: CanvasText;
+    --critical: CanvasText;
+    --success-bg: Canvas;
+    --caution-bg: Canvas;
+    --critical-bg: Canvas;
+    --info-bg: Canvas;
+    --attention-bg: Canvas;
+    --track: GrayText;
+    --focus-outer: Highlight;
+    --focus-inner: Canvas;
+    --brand-gradient: none;
+  }
 }

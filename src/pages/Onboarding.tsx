@@ -3,6 +3,7 @@ import { backend, type Role } from "../api";
 import { Button } from "../components/Button";
 import { Icon, type IconName } from "../components/Icon";
 import { InfoBar } from "../components/InfoBar";
+import { Logo } from "../components/Logo";
 import { useApp } from "../hooks/useApp";
 import { errorMessage } from "../lib/errors";
 
@@ -65,9 +66,7 @@ export function Onboarding({ onComplete }: { onComplete: (role: Role) => void })
     <main className="onboarding">
       <div className="onboarding-inner">
         <header className="onboarding-header">
-          <span className="onboarding-logo">
-            <Icon name="mouse" size={32} />
-          </span>
+          <Logo size={56} className="onboarding-logo" />
           <h1 className="page-title">Welcome to Moush</h1>
           <p className="text-secondary">Use one mouse and keyboard with all the computers on your desk.</p>
         </header>

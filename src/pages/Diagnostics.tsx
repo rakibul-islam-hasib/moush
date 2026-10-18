@@ -8,10 +8,11 @@ import { Page } from "../components/Page";
 import { ProgressRing } from "../components/ProgressRing";
 import { CardGroup, SettingsCard } from "../components/SettingsCard";
 import { useAction } from "../hooks/useAction";
-import { useApp } from "../hooks/useApp";
+import { useSnapshot } from "../hooks/useApp";
 import { useDiagnostics } from "../hooks/useDiagnostics";
 import { useToast } from "../hooks/useToast";
 import { formatBytes, formatCount, formatDuration, formatMs, formatUs } from "../lib/format";
+import type { Navigate } from "../lib/navigation";
 import type { Tone } from "../lib/status";
 
 const FIREWALL: Record<FirewallState, { label: string; tone: Tone; text: string }> = {
@@ -206,11 +207,11 @@ function DiagnosticsBody({ d }: { d: Diagnostics }) {
   );
 }
 
-export function DiagnosticsPage() {
+export function DiagnosticsPage({ onNavigate }: { onNavigate: Navigate }) {
   const { data, error } = useDiagnostics();
-  const { snapshot } = useApp();
+  const { snapshot } = useSnapshot();
   return (
-    <Page title="Diagnostics">
+    <Page title="Diagnostics" parent={{ label: "Settings", onClick: () => onNavigate("settings") }} subtitle="Check the connection, input and network health">
       {error && (
         <InfoBar severity="error" title="Couldn't read diagnostics" live>
           {error}
