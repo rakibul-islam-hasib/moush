@@ -1,13 +1,12 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { backend, type AppSnapshot, type HostSnapshot } from "../api";
 import { Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { InfoBar } from "../components/InfoBar";
 import { LayoutCanvas, type CanvasClient, type MoveRequest } from "../components/LayoutCanvas";
-import { Page } from "../components/Page";
 import { CardGroup, ListCard, ListRow, SettingsCard } from "../components/SettingsCard";
 import { useAction } from "../hooks/useAction";
-import { useApp } from "../hooks/useApp";
+import { useSnapshot } from "../hooks/useApp";
 import { useToast } from "../hooks/useToast";
 import { formatResolution, formatScale } from "../lib/format";
 import { resolveCollisions, snapPosition, touchesAny, type Point, type Rect } from "../lib/layoutGeometry";
@@ -67,17 +66,20 @@ function HostLayoutEditor({ host, deviceName }: { host: HostSnapshot; deviceName
   const selected = clients.find((c) => c.id === selectedId) ?? null;
   const unreachable = clients.filter((c) => !c.adjacent);
 
-  const move = ({ id, position, snapThreshold }: MoveRequest) => {
-    const me = clients.find((c) => c.id === id);
-    if (!me) return;
-    const others: Rect[] = [...host.monitors, ...clients.filter((c) => c.id !== id).map((c) => c.rect)];
-    let p: Point = position;
-    if (snapThreshold !== null) p = snapPosition({ ...me.rect, ...p }, others, snapThreshold);
-    p = resolveCollisions({ ...me.rect, ...p }, others, { x: me.rect.x, y: me.rect.y });
-    const rounded = { x: Math.round(p.x), y: Math.round(p.y) };
-    if (rounded.x === me.rect.x && rounded.y === me.rect.y) return;
-    setEdits((prev) => ({ ...prev, [id]: rounded }));
-  };
+  const move = useCallback(
+    ({ id, position, snapThreshold }: MoveRequest) => {
+      const me = clients.find((c) => c.id === id);
+      if (!me) return;
+      const others: Rect[] = [...host.monitors, ...clients.filter((c) => c.id !== id).map((c) => c.rect)];
+      let p: Point = position;
+      if (snapThreshold !== null) p = snapPosition({ ...me.rect, ...p }, others, snapThreshold);
+      p = resolveCollisions({ ...me.rect, ...p }, others, { x: me.rect.x, y: me.rect.y });
+      const rounded = { x: Math.round(p.x), y: Math.round(p.y) };
+      if (rounded.x === me.rect.x && rounded.y === me.rect.y) return;
+      setEdits((prev) => ({ ...prev, [id]: rounded }));
+    },
+    [clients, host.monitors],
+  );
 
   const save = async () => {
     const placements = clients.map((c) => ({ clientId: c.id, x: Math.round(c.rect.x), y: Math.round(c.rect.y) }));
@@ -86,20 +88,20 @@ function HostLayoutEditor({ host, deviceName }: { host: HostSnapshot; deviceName
   };
 
   return (
-    <Page
-      title="Display layout"
-      actions={
-        <>
+    <>
+      <div className="section-toolbar">
+        <p className="section-toolbar-text">Place your other computers next to this computer's screens. The cursor crosses where the edges touch.</p>
+        <div className="section-toolbar-actions">
           {dirty && <Badge tone="caution">Unsaved changes</Badge>}
           <Button icon="undo" disabled={!dirty || busy === "save"} onClick={() => setEdits({})}>
             Revert
           </Button>
           <Button variant="accent" icon="save" disabled={!dirty} busy={busy === "save"} onClick={() => void save()}>
-            Save
+            Save layout
           </Button>
-        </>
-      }
-    >
+        </div>
+      </div>
+
       {unreachable.map((c) => (
         <InfoBar key={c.id} severity="warning" title={`The cursor can't reach ${c.name}`}>
           Drag it so one of its edges touches a screen of this computer.
@@ -131,8 +133,8 @@ function HostLayoutEditor({ host, deviceName }: { host: HostSnapshot; deviceName
 
       {clients.length === 0 ? (
         <InfoBar severity="informational" title="No devices yet">
-          On another computer, install Moush, choose Client and connect to {deviceName}. It will appear here so you can
-          place it next to your screens.
+          On another computer, install Moush, choose Client and connect to {deviceName}. It will appear here so you can place it next to your
+          screens.
         </InfoBar>
       ) : selected ? (
         <SettingsCard
@@ -171,11 +173,7 @@ function HostLayoutEditor({ host, deviceName }: { host: HostSnapshot; deviceName
               Detect displays
             </Button>
           </ListRow>
-          <ListRow
-            icon="mouse"
-            title="Moving between your own screens"
-            description="Crossing between this computer's screens works as usual — input stays on this computer."
-          />
+          <ListRow icon="mouse" title="Moving between your own screens" description="Crossing between this computer's screens works as usual — input stays on this computer." />
           <ListRow
             icon="link"
             title="Moving into another device"
@@ -183,16 +181,16 @@ function HostLayoutEditor({ host, deviceName }: { host: HostSnapshot; deviceName
           />
         </ListCard>
       </CardGroup>
-    </Page>
+    </>
   );
 }
 
 function ClientDisplays({ snapshot }: { snapshot: AppSnapshot }) {
   const monitors = snapshot.client?.monitors ?? [];
   return (
-    <Page title="Displays">
+    <>
       <InfoBar severity="informational" title="The layout is set up on the host">
-        On the host computer, open Moush › Layout and drag {snapshot.deviceName} next to its screens.
+        On the host computer, open Moush › Devices › Screen layout and drag {snapshot.deviceName} next to its screens.
       </InfoBar>
       <div className="layout-editor">
         <LayoutCanvas monitors={monitors} label={`Screens of ${snapshot.deviceName}`} />
@@ -214,12 +212,13 @@ function ClientDisplays({ snapshot }: { snapshot: AppSnapshot }) {
           ))}
         </ListCard>
       </CardGroup>
-    </Page>
+    </>
   );
 }
 
-export function LayoutPage() {
-  const { snapshot } = useApp();
+/** The "Screen layout" tab of the Devices page. */
+export function LayoutTab() {
+  const { snapshot } = useSnapshot();
   if (snapshot.role === "host" && snapshot.host) {
     return <HostLayoutEditor host={snapshot.host} deviceName={snapshot.deviceName} />;
   }

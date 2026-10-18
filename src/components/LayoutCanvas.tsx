@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { memo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { MonitorInfo } from "../api";
 import { useElementSize } from "../hooks/useElementSize";
 import { cx } from "../lib/cx";
@@ -58,6 +58,7 @@ interface DragState {
   moved: boolean;
 }
 
+const NO_CLIENTS: CanvasClient[] = [];
 const PADDING_PX = 20;
 const LINE = 16;
 const SNAP_UNITS = 40;
@@ -113,7 +114,7 @@ function BoxLabel({ x, y, w, h, lines }: { x: number; y: number; w: number; h: n
  * Draws the host monitors (fixed) and client rectangles (draggable) of the
  * display layout, auto-fitted to the available space.
  */
-export function LayoutCanvas({ monitors, clients = [], selectedId = null, onSelect, onMove, label, describedBy }: LayoutCanvasProps) {
+export const LayoutCanvas = memo(function LayoutCanvas({ monitors, clients = NO_CLIENTS, selectedId = null, onSelect, onMove, label, describedBy }: LayoutCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(containerRef);
   const dragRef = useRef<DragState | null>(null);
@@ -302,4 +303,4 @@ export function LayoutCanvas({ monitors, clients = [], selectedId = null, onSele
       </svg>
     </div>
   );
-}
+});

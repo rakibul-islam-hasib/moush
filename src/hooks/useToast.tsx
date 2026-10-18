@@ -2,15 +2,21 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { InfoBar, type Severity } from "../components/InfoBar";
 import { errorMessage } from "../lib/errors";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   severity: Severity;
   message: string;
   title?: string;
+  action?: ToastAction;
 }
 
 export interface ToastApi {
-  notify: (severity: Severity, message: string, title?: string) => void;
+  notify: (severity: Severity, message: string, title?: string, action?: ToastAction) => void;
   /** Shows a rejected backend call (or any thrown value) as an error toast. */
   error: (e: unknown, title?: string) => void;
 }
@@ -23,13 +29,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback((id: number) => setToasts((all) => all.filter((t) => t.id !== id)), []);
 
-  const notify = useCallback((severity: Severity, message: string, title?: string) => {
+  const notify = useCallback((severity: Severity, message: string, title?: string, action?: ToastAction) => {
     const id = nextId.current++;
     // Identical messages (e.g. from polling) are shown once.
     setToasts((all) =>
       all.some((t) => t.message === message && t.severity === severity)
         ? all
-        : [...all.slice(-3), { id, severity, message, title }],
+        : [...all.slice(-3), { id, severity, message, title, action }],
     );
   }, []);
 
@@ -65,7 +71,26 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
-      <InfoBar severity={toast.severity} title={toast.title} live onClose={() => onDismiss(toast.id)}>
+      <InfoBar
+        severity={toast.severity}
+        title={toast.title}
+        live
+        onClose={() => onDismiss(toast.id)}
+        action={
+          toast.action && (
+            <button
+              type="button"
+              className="btn btn-standard btn-small"
+              onClick={() => {
+                toast.action?.onClick();
+                onDismiss(toast.id);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )
+        }
+      >
         {toast.message}
       </InfoBar>
     </div>
