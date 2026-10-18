@@ -6,6 +6,7 @@ compile_error!("moush-engine targets Windows; the platform-independent logic liv
 
 pub mod client;
 pub mod discovered;
+pub mod features;
 pub mod host;
 pub mod identity;
 pub mod layout;

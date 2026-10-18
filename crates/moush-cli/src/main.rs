@@ -212,6 +212,7 @@ fn cmd_host(args: &Args) -> Result<(), String> {
         trust,
         stdin_broker(),
         stats.clone(),
+        moush_engine::features::FeatureHub::new(),
         Arc::new(|| {}),
     )
     .map_err(|e| e.to_string())?;
@@ -269,6 +270,7 @@ fn cmd_client(args: &Args) -> Result<(), String> {
         trust,
         stdin_broker(),
         stats.clone(),
+        moush_engine::features::FeatureHub::new(),
         Arc::new(|| {}),
         |_| {},
     )
@@ -358,7 +360,7 @@ impl HostEvents for BenchHost {
 
 struct Quiet;
 impl ClientEvents for Quiet {
-    fn connected(&self, _: &PeerInfo) {}
+    fn connected(&self, _: &PeerInfo, _: &moush_engine::core::net::PeerSender) {}
     fn active_changed(&self, _: bool) {}
 }
 

@@ -17,7 +17,9 @@ use moush_engine::core::protocol::MonitorDesc;
 use moush_engine::core::stats::Stats;
 use moush_engine::core::trust::{TrustRole, TrustStore};
 use moush_engine::core::util::now_ms;
+use moush_engine::core::features::{self as feat, cap};
 use moush_engine::discovered::DiscoveryCache;
+use moush_engine::features::FeatureHub;
 use moush_engine::host::{HostEngine, HostOptions, Notify};
 use moush_engine::paths::AppPaths;
 use moush_engine::win::monitors::{self, Monitor};
@@ -49,6 +51,9 @@ pub struct App {
     started: Instant,
     pub platform: Mutex<PlatformInfo>,
     notify: Notify,
+    /// Connects optional features (clipboard, file transfer) to the connected peers.
+    pub hub: Arc<FeatureHub>,
+    handle: AppHandle,
 }
 
 impl App {
@@ -77,7 +82,11 @@ impl App {
             started: Instant::now(),
             platform: Mutex::new(PlatformInfo { os_build, windows11: os_build >= 22000, mica: false, elevated: system::is_elevated() }),
             notify,
+            hub: FeatureHub::new(),
+            handle: handle.clone(),
         });
+        let weak = Arc::downgrade(&app);
+        app.hub.set_policy(move |id| weak.upgrade().map(|a| a.local_caps(id)).unwrap_or(0));
         // Emit snapshots from one thread, coalescing bursts of changes.
         let weak = Arc::downgrade(&app);
         thread::Builder::new()
@@ -89,6 +98,27 @@ impl App {
 
     pub fn notify(&self) {
         (self.notify)();
+    }
+
+    pub fn handle(&self) -> &AppHandle {
+        &self.handle
+    }
+
+    /// Feature bits this computer allows with a peer: global settings combined with the
+    /// paired device's policy. Unpaired devices get nothing.
+    pub fn local_caps(&self, peer_id: &str) -> u32 {
+        let Some(policy) = self.trust.policy(peer_id) else { return 0 };
+        let s = self.config().settings;
+        feat::local_caps(&s.clipboard, &s.transfer, &policy)
+    }
+
+    pub fn set_device_policy(&self, id: &str, policy: feat::DevicePolicy) -> Result<(), String> {
+        if !self.trust.set_policy(id, policy).map_err(|e| e.to_string())? {
+            return Err("that device is not paired".into());
+        }
+        self.hub.refresh_caps();
+        self.notify();
+        Ok(())
     }
 
     pub fn config(&self) -> Config {
@@ -184,6 +214,7 @@ impl App {
             self.trust.clone(),
             self.broker.clone(),
             self.stats.clone(),
+            self.hub.clone(),
             self.notify.clone(),
         );
         let r = match result {
@@ -256,6 +287,7 @@ impl App {
             self.trust.clone(),
             self.broker.clone(),
             self.stats.clone(),
+            self.hub.clone(),
             self.notify.clone(),
             |_| {}, // the host is remembered in `remember_host` once connected
         )
@@ -346,6 +378,7 @@ impl App {
         c.settings = new.clone();
         self.save_config(&c);
         *self.config.lock().unwrap() = c;
+        self.hub.refresh_caps();
 
         let restart_host = new.port != old.settings.port
             || new.discovery_enabled != old.settings.discovery_enabled
@@ -415,9 +448,33 @@ impl App {
                     last_address: t.last_address.clone(),
                     paired_at: t.paired_at,
                     last_seen: t.last_seen,
+                    policy: t.policy,
+                    online: self.hub.peer(&t.id).is_some(),
                 })
                 .collect(),
             discovered,
+            features: self.features_snapshot(),
+        }
+    }
+
+    fn features_snapshot(&self) -> FeaturesSnapshot {
+        let s = self.config().settings;
+        FeaturesSnapshot {
+            peers: self
+                .hub
+                .peers()
+                .into_iter()
+                .map(|p| FeaturePeer {
+                    clipboard: p.effective_caps & cap::CLIPBOARD != 0,
+                    files: p.effective_caps & cap::FILES != 0,
+                    text_share: p.effective_caps & cap::TEXT_SHARE != 0,
+                    id: p.id,
+                    name: p.name,
+                })
+                .collect(),
+            clipboard: ClipboardStatus { enabled: s.clipboard.enabled, ..Default::default() },
+            transfers: Vec::new(),
+            shared_texts: Vec::new(),
         }
     }
 

@@ -131,6 +131,38 @@ pub async fn forget_device(app: State<'_, Arc<App>>, device_id: String) -> Res<(
     blocking(move || app.forget_device(&device_id)).await
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicePolicyArg {
+    clipboard: bool,
+    files: bool,
+    text_share: bool,
+}
+
+/// Changes what a paired device may do (clipboard, files, shared text). Applies at once.
+#[tauri::command]
+pub async fn set_device_policy(app: State<'_, Arc<App>>, device_id: String, policy: DevicePolicyArg) -> Res<()> {
+    let app = app.inner().clone();
+    let p = moush_engine::core::features::DevicePolicy { clipboard: policy.clipboard, files: policy.files, text_share: policy.text_share };
+    blocking(move || app.set_device_policy(&device_id, p)).await
+}
+
+/// Restores every setting to its default (keeps role, device name and the last host).
+#[tauri::command]
+pub async fn reset_settings(app: State<'_, Arc<App>>, handle: AppHandle) -> Res<Settings> {
+    let app = app.inner().clone();
+    let current = app.config().settings;
+    let defaults = Settings {
+        device_name: current.device_name,
+        last_host_address: current.last_host_address,
+        ..Settings::default()
+    };
+    let theme = defaults.theme.clone();
+    let r = blocking(move || app.update_settings(defaults)).await?;
+    crate::apply_theme(&handle, &theme);
+    Ok(r)
+}
+
 #[tauri::command]
 pub async fn get_diagnostics(app: State<'_, Arc<App>>) -> Res<Diagnostics> {
     let app = app.inner().clone();

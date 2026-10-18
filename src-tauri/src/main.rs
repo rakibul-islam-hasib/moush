@@ -4,6 +4,7 @@
 mod app;
 mod commands;
 mod dto;
+mod notify;
 mod settings;
 mod tray;
 
@@ -46,6 +47,8 @@ fn main() {
             commands::discover_hosts,
             commands::respond_pairing,
             commands::forget_device,
+            commands::set_device_policy,
+            commands::reset_settings,
             commands::get_diagnostics,
             commands::get_logs,
             commands::run_latency_test,

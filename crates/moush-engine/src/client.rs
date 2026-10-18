@@ -12,13 +12,14 @@ use moush_core::crypto::Identity;
 use moush_core::discovery;
 use moush_core::inject::{InjectState, Injector};
 use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
-use moush_core::net::PeerInfo;
+use moush_core::net::{PeerInfo, PeerSender};
 use moush_core::pairing::PairingBroker;
 use moush_core::protocol::{MonitorDesc, MouseButton, WheelAxis};
 use moush_core::stats::{LatencySummary, Stats};
 use moush_core::trust::TrustStore;
 use moush_core::util::now_ms;
 
+use crate::features::FeatureHub;
 use crate::host::Notify;
 use crate::win::display_watch::DisplayWatcher;
 use crate::win::dpi::make_thread_dpi_aware;
@@ -73,6 +74,10 @@ struct Shared {
     lost_at: Mutex<Option<Instant>>,
     /// Called with the address of every successful connection (to remember it).
     on_connected: Box<dyn Fn(&str) + Send + Sync>,
+    hub: Arc<FeatureHub>,
+    /// (host id, connection number) of the current session, for the feature hub.
+    session: Mutex<Option<(String, u64)>>,
+    sessions: std::sync::atomic::AtomicU64,
 }
 
 impl Shared {
@@ -83,7 +88,10 @@ impl Shared {
 }
 
 impl ClientEvents for Shared {
-    fn connected(&self, host: &PeerInfo) {
+    fn connected(&self, host: &PeerInfo, sender: &PeerSender) {
+        let conn_no = self.sessions.fetch_add(1, Ordering::SeqCst) + 1;
+        *self.session.lock().unwrap() = Some((host.id.clone(), conn_no));
+        self.hub.peer_up(&host.id, &host.name, conn_no, sender.clone());
         if let Some(t) = self.lost_at.lock().unwrap().take() {
             Stats::add(&self.stats.reconnects, 1);
             self.stats.last_reconnect_ms.store(t.elapsed().as_millis() as u64, Ordering::Relaxed);
@@ -102,6 +110,25 @@ impl ClientEvents for Shared {
     fn active_changed(&self, active: bool) {
         log::info!("{}", if active { "shared cursor entered this computer" } else { "shared cursor left this computer" });
         self.update(|v| v.active = active);
+    }
+
+    fn disconnected(&self) {
+        if let Some((id, conn_no)) = self.session.lock().unwrap().take() {
+            self.hub.peer_down(&id, conn_no);
+        }
+    }
+
+    fn capabilities(&self, features: u32) {
+        if let Some((id, conn_no)) = self.session.lock().unwrap().clone() {
+            self.hub.on_capabilities(&id, conn_no, features);
+        }
+    }
+
+    fn feature(&self, channel: u8, body: Vec<u8>) {
+        let session = self.session.lock().unwrap().clone();
+        if let Some((id, conn_no)) = session {
+            self.hub.on_feature(&id, conn_no, channel, body);
+        }
     }
 }
 
@@ -123,6 +150,7 @@ impl ClientEngine {
         trust: Arc<TrustStore>,
         broker: Arc<PairingBroker>,
         stats: Arc<Stats>,
+        hub: Arc<FeatureHub>,
         notify: Notify,
         on_connected: impl Fn(&str) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
@@ -147,6 +175,9 @@ impl ClientEngine {
             stats: stats.clone(),
             lost_at: Mutex::new(None),
             on_connected: Box::new(on_connected),
+            hub,
+            session: Mutex::new(None),
+            sessions: std::sync::atomic::AtomicU64::new(0),
         });
         let link = ClientLink::new();
         let stop = Arc::new(AtomicBool::new(false));

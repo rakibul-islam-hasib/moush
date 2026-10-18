@@ -8,9 +8,12 @@
 //! * [`net`] – host server and client sessions over TCP.
 //! * [`discovery`] – LAN discovery over UDP broadcast.
 //! * [`trust`], [`pairing`] – paired devices and pending pairing prompts.
+//! * [`features`], [`flow`] – optional features (clipboard, files) and their flow control.
 
 pub mod crypto;
 pub mod discovery;
+pub mod features;
+pub mod flow;
 pub mod geometry;
 pub mod inject;
 pub mod keys;

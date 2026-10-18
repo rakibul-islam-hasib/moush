@@ -8,6 +8,12 @@
 //! repaired by fast retransmit within a few milliseconds while input is flowing, and the
 //! writer coalesces queued moves so a stall never replays a backlog of stale positions.
 //! UDP would need its own ordering and retransmission for exactly the events that matter.
+//!
+//! Bulk feature traffic (clipboard contents, file chunks) shares the connection but never
+//! delays input: at most [`MAX_BULK_QUEUED`] bulk messages may wait in a connection's
+//! queue, the writer always sends pending input first and writes bulk messages one at a
+//! time in between, and feature senders bound the bytes in flight with
+//! [`crate::flow::Window`].
 
 pub mod client;
 pub mod host;
@@ -17,11 +23,11 @@ use std::io::{self, BufReader};
 use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::crypto::{device_id, FrameReader, FrameWriter, SecureChannel};
+use crate::crypto::{device_id, FrameReader, FrameWriter, SecureChannel, MAX_FRAME_PLAINTEXT};
 use crate::pairing::{PairingBroker, PairingRequest};
 use crate::protocol::{self, Message, PeerRole, PROTOCOL_VERSION};
 use crate::stats::{LatencySummary, Stats};
@@ -37,6 +43,8 @@ pub const WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 pub const OUTBOX_CAPACITY: usize = 4096;
 /// Ping ids at or above this value belong to an explicit latency test.
 const PROBE_ID_BASE: u32 = 0x8000_0000;
+/// Bulk (feature) messages that may wait in one connection's queue at a time.
+pub const MAX_BULK_QUEUED: usize = 16;
 
 /// A message queued for sending, stamped with the time it was captured.
 pub struct Outgoing {
@@ -55,6 +63,103 @@ impl Outgoing {
 }
 
 pub type Outbox = SyncSender<Outgoing>;
+
+/// Limits how many bulk messages wait in a connection's queue, so feature traffic can
+/// never fill the queue that input depends on.
+#[derive(Debug, Default)]
+pub struct BulkGate {
+    state: Mutex<(usize, bool)>,
+    cv: Condvar,
+}
+
+impl BulkGate {
+    fn enter(&self, timeout: Option<Duration>) -> bool {
+        let deadline = timeout.map(|t| Instant::now() + t);
+        let mut s = self.state.lock().unwrap();
+        loop {
+            if s.1 {
+                return false;
+            }
+            if s.0 < MAX_BULK_QUEUED {
+                s.0 += 1;
+                return true;
+            }
+            let left = match deadline {
+                Some(d) => d.saturating_duration_since(Instant::now()),
+                None => return false,
+            };
+            if left.is_zero() {
+                return false;
+            }
+            s = self.cv.wait_timeout(s, left).unwrap().0;
+        }
+    }
+
+    fn leave(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.0 = s.0.saturating_sub(1);
+        self.cv.notify_one();
+    }
+
+    fn close(&self) {
+        self.state.lock().unwrap().1 = true;
+        self.cv.notify_all();
+    }
+}
+
+/// Sends feature and control traffic to one connected peer. Cheap to clone; becomes
+/// inert when the connection closes.
+#[derive(Clone)]
+pub struct PeerSender {
+    outbox: Outbox,
+    gate: Arc<BulkGate>,
+    shared: Arc<ConnShared>,
+}
+
+impl PeerSender {
+    pub(crate) fn new(outbox: Outbox, gate: Arc<BulkGate>, shared: Arc<ConnShared>) -> Self {
+        Self { outbox, gate, shared }
+    }
+
+    /// Queues a small control message (e.g. `Capabilities`) without blocking.
+    pub fn send_control(&self, msg: protocol::Message) -> bool {
+        debug_assert!(!msg.is_bulk());
+        try_send(&self.outbox, Outgoing::untimed(msg))
+    }
+
+    /// Queues a feature message, waiting up to `timeout` while the connection already
+    /// has [`MAX_BULK_QUEUED`] bulk messages waiting. Call from worker threads only.
+    /// Returns false on timeout or when the connection is gone.
+    pub fn send_feature(&self, channel: u8, body: Vec<u8>, timeout: Duration) -> bool {
+        self.queue_feature(channel, body, Some(timeout))
+    }
+
+    /// Like [`send_feature`](Self::send_feature) but never blocks (safe on reader threads).
+    pub fn try_send_feature(&self, channel: u8, body: Vec<u8>) -> bool {
+        self.queue_feature(channel, body, None)
+    }
+
+    fn queue_feature(&self, channel: u8, body: Vec<u8>, timeout: Option<Duration>) -> bool {
+        if body.len() > protocol::MAX_FEATURE_BODY {
+            log::error!("feature body of {} bytes exceeds the limit", body.len());
+            return false;
+        }
+        if self.shared.is_closed() || !self.gate.enter(timeout) {
+            return false;
+        }
+        match self.outbox.try_send(Outgoing::untimed(Message::Feature { channel, body })) {
+            Ok(()) => true,
+            Err(_) => {
+                self.gate.leave();
+                false
+            }
+        }
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.shared.is_closed()
+    }
+}
 
 /// Queues a message without blocking. A full queue means the peer stopped reading.
 pub fn try_send(outbox: &Outbox, msg: Outgoing) -> bool {
@@ -171,12 +276,25 @@ pub struct MsgWriter {
 }
 
 impl MsgWriter {
+    /// Sends `msgs` in as few frames as possible. A message never spans two frames,
+    /// because the reader decodes each frame on its own.
     pub fn send(&mut self, msgs: &[Message]) -> io::Result<()> {
         self.buf.clear();
         for m in msgs {
+            if !self.buf.is_empty() && self.buf.len() + protocol::encoded_len(m) > MAX_FRAME_PLAINTEXT {
+                self.flush()?;
+            }
             protocol::encode(m, &mut self.buf);
         }
+        self.flush()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if self.buf.is_empty() {
+            return Ok(());
+        }
         let n = self.fw.write_frame(&self.buf)?;
+        self.buf.clear();
         Stats::add(&self.stats.frames_sent, 1);
         Stats::add(&self.stats.bytes_sent, n as u64);
         Ok(())
@@ -214,20 +332,48 @@ pub fn coalesce(batch: &mut Vec<Outgoing>) {
 
 /// Sends queued messages, pings the peer every second and closes the connection if the
 /// peer goes silent. Runs until the connection closes or every sender is dropped.
-pub(crate) fn run_writer(mut w: MsgWriter, rx: Receiver<Outgoing>, shared: Arc<ConnShared>, stats: Arc<Stats>, measure: bool) {
+///
+/// Input and control messages always go first; bulk messages are held back and written
+/// one per loop iteration, so input queued meanwhile overtakes the rest of the bulk data.
+pub(crate) fn run_writer(
+    mut w: MsgWriter,
+    rx: Receiver<Outgoing>,
+    shared: Arc<ConnShared>,
+    gate: Arc<BulkGate>,
+    stats: Arc<Stats>,
+    measure: bool,
+) {
     let mut next_ping = Instant::now() + PING_INTERVAL;
     let mut ping_id: u32 = 0;
     let mut batch: Vec<Outgoing> = Vec::with_capacity(64);
     let mut msgs: Vec<Message> = Vec::with_capacity(64);
+    let mut bulk: VecDeque<Message> = VecDeque::new();
     loop {
         let wait = next_ping.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(wait) {
+        let first = if bulk.is_empty() {
+            rx.recv_timeout(wait)
+        } else {
+            rx.try_recv().map_err(|e| match e {
+                mpsc::TryRecvError::Empty => RecvTimeoutError::Timeout,
+                mpsc::TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
+            })
+        };
+        match first {
             Ok(first) => {
                 batch.push(first);
                 while batch.len() < 256 {
                     match rx.try_recv() {
                         Ok(m) => batch.push(m),
                         Err(_) => break,
+                    }
+                }
+                // Hold bulk messages back; they are written below, one at a time.
+                let mut i = 0;
+                while i < batch.len() {
+                    if batch[i].msg.is_bulk() {
+                        bulk.push_back(batch.remove(i).msg);
+                    } else {
+                        i += 1;
                     }
                 }
                 coalesce(&mut batch);
@@ -258,6 +404,15 @@ pub(crate) fn run_writer(mut w: MsgWriter, rx: Receiver<Outgoing>, shared: Arc<C
         if shared.is_closed() {
             break;
         }
+        if let Some(m) = bulk.pop_front() {
+            gate.leave();
+            if let Err(e) = w.send(std::slice::from_ref(&m)) {
+                if !shared.is_closed() {
+                    log::info!("send failed: {e}");
+                }
+                break;
+            }
+        }
         if Instant::now() >= next_ping {
             let silent = mono_ms().saturating_sub(shared.last_recv_ms.load(Ordering::Relaxed));
             if silent > DEAD_AFTER.as_millis() as u64 {
@@ -275,6 +430,7 @@ pub(crate) fn run_writer(mut w: MsgWriter, rx: Receiver<Outgoing>, shared: Arc<C
         }
     }
     shared.close();
+    gate.close();
 }
 
 /// Sends `count` pings `interval` apart through `outbox` and measures their RTT.

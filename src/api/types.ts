@@ -119,6 +119,15 @@ export interface TrustedDevice {
   lastAddress: string | null;
   pairedAt: number;
   lastSeen: number | null;
+  policy: DevicePolicy; // what this device may do with us
+  online: boolean; // currently connected
+}
+
+/** Per-device permissions, stored with the paired device. */
+export interface DevicePolicy {
+  clipboard: boolean;
+  files: boolean;
+  textShare: boolean;
 }
 
 export interface PlatformInfo {
@@ -140,9 +149,129 @@ export interface AppSnapshot {
   pairing: PairingRequest[];
   trusted: TrustedDevice[];
   discovered: DiscoveredHost[]; // hosts found on the LAN (client role)
+  features: FeaturesSnapshot;
+}
+
+// ---------------------------------------------------------------- features
+
+/** A connected peer and the features BOTH sides currently allow with it. */
+export interface FeaturePeer {
+  id: string;
+  name: string;
+  clipboard: boolean;
+  files: boolean;
+  textShare: boolean;
+}
+
+export type ClipKind = "text" | "rich" | "image";
+
+export interface ClipboardStatus {
+  enabled: boolean; // synchronization enabled in settings
+  lastSyncAt: number | null; // unix ms of the last update sent or received
+  lastDirection: "sent" | "received" | null;
+  lastPeer: string | null; // device name
+  lastKind: ClipKind | null;
+  historyCount: number;
+  historyRevision: number; // changes whenever the history changes: refetch then
+  error: string | null;
+}
+
+export interface TransferFile {
+  name: string;
+  size: number;
+}
+
+export type TransferState = "pending" | "active" | "done" | "failed" | "cancelled" | "rejected";
+
+export interface TransferView {
+  id: string;
+  direction: "send" | "receive";
+  peerId: string;
+  peerName: string;
+  files: TransferFile[];
+  totalBytes: number;
+  doneBytes: number;
+  bytesPerSec: number;
+  /** "pending": receive = waiting for this user's approval; send = waiting for the peer. */
+  state: TransferState;
+  error: string | null;
+  startedAt: number;
+  finishedAt: number | null;
+  destination: string | null; // receive: folder the files were saved to
+  canRetry: boolean;
+}
+
+/** Text, a link or a snippet shared manually between computers. */
+export interface SharedTextView {
+  id: string;
+  direction: "sent" | "received";
+  peerName: string;
+  preview: string; // at most 4 KB
+  chars: number;
+  isLink: boolean; // the whole text is one http(s) URL
+  at: number;
+}
+
+export interface FeaturesSnapshot {
+  peers: FeaturePeer[];
+  clipboard: ClipboardStatus;
+  transfers: TransferView[]; // newest first, at most 50
+  sharedTexts: SharedTextView[]; // newest first, at most 20, memory only
+}
+
+export interface ClipboardEntry {
+  id: string;
+  kind: ClipKind;
+  preview: string; // first 300 chars, or e.g. "Image 1920 x 1080"
+  bytes: number;
+  origin: "local" | "sent" | "received";
+  source: string; // device name, "This PC" for local copies
+  at: number;
 }
 
 export type Theme = "system" | "light" | "dark";
+
+export interface ClipboardSettings {
+  enabled: boolean; // master switch for clipboard synchronization
+  text: boolean; // plain Unicode text
+  richText: boolean; // HTML + RTF alongside the text
+  images: boolean;
+  maxSizeKb: number; // 16..65536; larger contents are not synchronized
+  skipSensitive: boolean; // skip clips marked sensitive by password managers
+  history: boolean; // keep a history in memory (never on disk)
+  historyLimit: number; // 1..200
+}
+
+export interface KeyboardSettings {
+  forwardKeyboard: boolean; // off = only the mouse moves; typing stays on the host
+  forwardSystemShortcuts: boolean; // Alt+Tab, Win, Alt+F4, Ctrl+Esc go to the active computer
+  localShortcuts: string[]; // shortcuts that always stay on the host, e.g. "Ctrl+Shift+Esc" (max 16)
+  switchHotkeys: boolean; // Ctrl+Alt+Shift+Arrow jumps to the neighbouring computer; +Home returns
+  focusOnEnter: boolean; // client focuses the window under the cursor on entry
+  edgeSwitchModifier: "none" | "ctrl" | "shift" | "alt"; // edge switching only while held
+}
+
+export interface TransferSettings {
+  enabled: boolean;
+  downloadDir: string; // "" = Downloads\Moush
+  askBeforeReceiving: boolean;
+  overwrite: "rename" | "overwrite" | "skip";
+  speed: "balanced" | "fast"; // balanced keeps input latency lowest
+  openFolderWhenDone: boolean; // never opens or runs the files themselves
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  connections: boolean;
+  transfers: boolean;
+  sharedText: boolean;
+  clipboard: boolean;
+}
+
+export interface AppearanceSettings {
+  transparency: boolean; // Mica backdrop on Windows 11
+  motion: "system" | "reduce" | "full";
+}
 
 export interface Settings {
   deviceName: string;
@@ -158,6 +287,11 @@ export interface Settings {
   clientPointerSpeed: number; // 0.25..4.0, multiplier for pointer speed on clients
   scrollLockToggle: boolean; // Scroll Lock locks the cursor to the current computer
   lastHostAddress: string | null; // client: last successfully used host address
+  clipboard: ClipboardSettings;
+  keyboard: KeyboardSettings;
+  transfer: TransferSettings;
+  notifications: NotificationSettings;
+  appearance: AppearanceSettings;
 }
 
 export interface ProcessStats {

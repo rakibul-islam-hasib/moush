@@ -11,8 +11,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use super::{
-    hello_and_authorize, handle_keepalive, run_writer, split_channel, AuthCtx, ConnShared, Outbox, Outgoing, PeerInfo,
-    HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, WRITE_TIMEOUT,
+    hello_and_authorize, handle_keepalive, run_writer, split_channel, AuthCtx, BulkGate, ConnShared, Outbox, Outgoing,
+    PeerInfo, PeerSender, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, WRITE_TIMEOUT,
 };
 use crate::crypto::{handshake, Identity};
 use crate::pairing::PairingBroker;
@@ -32,6 +32,8 @@ pub struct ClientHandle {
     pub addr: SocketAddr,
     pub screens: Vec<MonitorDesc>,
     pub outbox: Outbox,
+    /// Feature and control traffic to this client.
+    pub sender: PeerSender,
     /// Increases with every connection; lets the receiver ignore stale disconnects
     /// after a client reconnected.
     pub conn_no: u64,
@@ -42,6 +44,10 @@ pub trait HostEvents: Send + Sync + 'static {
     fn client_connected(&self, client: ClientHandle);
     fn client_screens(&self, id: &str, conn_no: u64, screens: Vec<MonitorDesc>);
     fn client_disconnected(&self, id: &str, conn_no: u64, reason: &str);
+    /// The client announced which optional features it allows.
+    fn client_capabilities(&self, _id: &str, _conn_no: u64, _features: u32) {}
+    /// Feature traffic from the client (runs on its reader thread).
+    fn client_feature(&self, _id: &str, _conn_no: u64, _channel: u8, _body: Vec<u8>) {}
 }
 
 #[derive(Clone, Debug)]
@@ -297,10 +303,14 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         }
     };
     let (tx, rx) = sync_channel::<Outgoing>(OUTBOX_CAPACITY);
+    let gate = Arc::new(BulkGate::default());
     let writer = {
         let shared = shared.clone();
         let stats = ctx.stats.clone();
-        thread::Builder::new().name(format!("host-tx-{}", peer.name)).spawn(move || run_writer(w, rx, shared, stats, true))
+        let gate = gate.clone();
+        thread::Builder::new()
+            .name(format!("host-tx-{}", peer.name))
+            .spawn(move || run_writer(w, rx, shared, gate, stats, true))
     };
     if writer.is_err() {
         log::error!("cannot spawn writer thread");
@@ -331,6 +341,7 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         addr,
         screens,
         outbox: tx.clone(),
+        sender: PeerSender::new(tx.clone(), gate, shared.clone()),
         conn_no,
     });
 
@@ -375,6 +386,8 @@ fn read_loop(
                     ctx.events.client_screens(&peer.id, conn_no, monitors);
                 }
                 Message::Bye { reason } => return format!("client said goodbye: {reason}"),
+                Message::Capabilities { features } => ctx.events.client_capabilities(&peer.id, conn_no, features),
+                Message::Feature { channel, body } => ctx.events.client_feature(&peer.id, conn_no, channel, body),
                 other => {
                     // A client never sends input; anything else is a protocol violation.
                     log::warn!("{} sent unexpected {:?}; disconnecting", peer.name, other);
