@@ -10,6 +10,8 @@
 //! allows with it (`features::cap` bits from the policy callback). Services must only
 //! *send* when [`FeatureHub::effective_caps`] has the bit, and must re-check their own
 //! settings and [`FeatureHub::local_caps`] before acting on anything they *receive*.
+//! As a second line of defence the hub itself drops traffic from stale connections and
+//! on a known channel whose capability this side does not allow with the peer.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};

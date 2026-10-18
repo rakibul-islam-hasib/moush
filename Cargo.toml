@@ -21,12 +21,35 @@ blake2 = "0.10"
 if-addrs = "0.15"
 windows = "0.62"
 
+# Release: optimize for size, except the input and transport hot path, which stays at
+# opt-level 3 (at "z" the crypto runs ~4x slower, and a bulk chunk is decrypted on the
+# client's injection thread). Measurements and alternatives: docs/PERFORMANCE.md.
+# `panic = "abort"` would save another ~2.8 MB but is deliberately not used: the hook
+# callback relies on `catch_unwind` (an internal error lets the event through instead of
+# killing the process) and a panic in one connection must not take the whole app down.
 [profile.release]
-opt-level = 3
-lto = "thin"
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
 panic = "unwind"
-strip = "debuginfo"
+strip = true
+
+[profile.release.package.moush-core]
+opt-level = 3
+[profile.release.package.moush-engine]
+opt-level = 3
+[profile.release.package.snow]
+opt-level = 3
+[profile.release.package.chacha20poly1305]
+opt-level = 3
+[profile.release.package.chacha20]
+opt-level = 3
+[profile.release.package.poly1305]
+opt-level = 3
+[profile.release.package.blake2]
+opt-level = 3
+[profile.release.package.curve25519-dalek]
+opt-level = 3
 
 # Debug builds: the transport's crypto runs ~200x slower unoptimized (3-4 MB/s), which makes
 # bulk tests slow and debug builds of the app useless for transfers. These crates are small

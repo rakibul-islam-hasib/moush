@@ -34,10 +34,19 @@ function Build([string[]]$cargoArgs) {
     return [math]::Round($sw.Elapsed.TotalSeconds)
 }
 
+# Both binaries land on the same path (Moush.exe = moush.exe), so a package that cargo
+# considers fresh would not be re-linked and the copy would pick up the other binary:
+# clean each package's own artifacts first (cheap: dependencies stay built).
+& cargo clean --release -p moush 2>&1 | Out-Null
 $tApp = Build @("-p", "moush", "--features", "tauri/custom-protocol")
 Copy-Item "$env:CARGO_TARGET_DIR\release\Moush.exe" "$out\Moush.exe" -Force
+& cargo clean --release -p moush-cli 2>&1 | Out-Null
 $tCli = Build @("-p", "moush-cli")
 Copy-Item "$env:CARGO_TARGET_DIR\release\moush.exe" "$out\moush-cli.exe" -Force
+if ((Get-FileHash "$out\Moush.exe").Hash -eq (Get-FileHash "$out\moush-cli.exe").Hash) {
+    # Never run the GUI by mistake (it would start with the real user configuration).
+    throw "app and CLI copies are identical; the CLI was not re-linked"
+}
 
 $app = (Get-Item "$out\Moush.exe").Length
 $cli = (Get-Item "$out\moush-cli.exe").Length
