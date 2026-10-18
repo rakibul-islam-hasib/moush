@@ -1,6 +1,7 @@
 //! Windows-specific implementation.
 
 pub mod capture;
+pub mod clipboard;
 pub mod display_watch;
 pub mod dpi;
 pub mod inject;
