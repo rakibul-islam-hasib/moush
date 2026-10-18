@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use moush_engine::core::crypto::Identity;
 use moush_engine::core::features::{cap, channel};
 use moush_engine::core::inject::{InjectState, Injector};
-use moush_engine::core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig};
+use moush_engine::core::net::client::{ClientEvents, ClientLink, SessionConfig, run_session};
 use moush_engine::core::net::host::{ClientHandle, HostEvents, HostServer};
 use moush_engine::core::net::{PeerInfo, PeerSender};
 use moush_engine::core::pairing::PairingBroker;
@@ -147,7 +147,15 @@ fn link() -> Link {
                     trust: &client_trust,
                     broker: &broker,
                     stats: &stats,
-                    screens: vec![MonitorDesc { x: 0, y: 0, width: 800, height: 600, dpi: 96, primary: true, name: "D".into() }],
+                    screens: vec![MonitorDesc {
+                        x: 0,
+                        y: 0,
+                        width: 800,
+                        height: 600,
+                        dpi: 96,
+                        primary: true,
+                        name: "D".into(),
+                    }],
                     stop: &stop,
                 },
                 &mut inject,
@@ -287,7 +295,9 @@ fn refresh_caps_announces_only_changes() {
     // The last announcement the peer received is the current policy.
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut last = None;
-    while let Ok(v) = l.announced.recv_timeout(deadline.saturating_duration_since(Instant::now()).min(Duration::from_millis(300))) {
+    while let Ok(v) =
+        l.announced.recv_timeout(deadline.saturating_duration_since(Instant::now()).min(Duration::from_millis(300)))
+    {
         last = Some(v);
     }
     assert_eq!(last, Some(cap::TEXT_SHARE));

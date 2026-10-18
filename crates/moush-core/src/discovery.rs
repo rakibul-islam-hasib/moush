@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::protocol::{truncate_utf8, DISCOVERY_PORT, MAX_STRING};
+use crate::protocol::{DISCOVERY_PORT, MAX_STRING, truncate_utf8};
 
 const MAGIC: &[u8; 4] = b"MSHD";
 const VERSION: u8 = 1;
@@ -213,10 +213,7 @@ pub fn broadcast_targets() -> Vec<Ipv4Addr> {
 pub fn local_addresses() -> Vec<(String, IpAddr)> {
     if_addrs::get_if_addrs()
         .map(|v| {
-            v.into_iter()
-                .filter(|i| !i.is_loopback() && i.ip().is_ipv4())
-                .map(|i| (i.name.clone(), i.ip()))
-                .collect()
+            v.into_iter().filter(|i| !i.is_loopback() && i.ip().is_ipv4()).map(|i| (i.name.clone(), i.ip())).collect()
         })
         .unwrap_or_default()
 }
@@ -238,7 +235,10 @@ pub fn scan_on(wait: Duration, port: u16, targets: &[Ipv4Addr]) -> io::Result<Ve
         }
     }
     if !sent_any {
-        return Err(io::Error::new(io::ErrorKind::NetworkUnreachable, "no network interface could send a discovery probe"));
+        return Err(io::Error::new(
+            io::ErrorKind::NetworkUnreachable,
+            "no network interface could send a discovery probe",
+        ));
     }
     let deadline = Instant::now() + wait;
     let mut found: HashMap<String, Found> = HashMap::new();
@@ -296,8 +296,11 @@ mod tests {
 
     #[test]
     fn responder_answers_probe_on_loopback() {
-        let r = Responder::start_on(Announce { id: "abcd".into(), name: "Host".into(), port: 4242 }, SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
-            .unwrap();
+        let r = Responder::start_on(
+            Announce { id: "abcd".into(), name: "Host".into(), port: 4242 },
+            SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0),
+        )
+        .unwrap();
         let found = scan_on(Duration::from_millis(500), r.port, &[Ipv4Addr::LOCALHOST]).unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].announce.name, "Host");

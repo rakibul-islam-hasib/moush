@@ -11,10 +11,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use super::{
-    hello_and_authorize, handle_keepalive, run_writer, split_channel, AuthCtx, BulkGate, ConnShared, Outbox, Outgoing,
-    PeerInfo, PeerSender, SetupDeadline, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, SETUP_DEADLINE, WRITE_TIMEOUT,
+    AuthCtx, BulkGate, ConnShared, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, Outbox, Outgoing, PeerInfo, PeerSender,
+    SETUP_DEADLINE, SetupDeadline, WRITE_TIMEOUT, handle_keepalive, hello_and_authorize, run_writer, split_channel,
 };
-use crate::crypto::{handshake, Identity};
+use crate::crypto::{Identity, handshake};
 use crate::pairing::PairingBroker;
 use crate::protocol::{Message, MonitorDesc, PeerRole};
 use crate::stats::{LatencySummary, Stats};
@@ -140,10 +140,8 @@ impl HostServer {
 
     pub fn clients(&self) -> Vec<ClientInfo> {
         let clients = self.ctx.clients.lock().unwrap();
-        let mut v: Vec<ClientInfo> = clients
-            .values()
-            .map(|e| ClientInfo { rtt_ms: e.shared.rtt_ms(), ..e.info.clone() })
-            .collect();
+        let mut v: Vec<ClientInfo> =
+            clients.values().map(|e| ClientInfo { rtt_ms: e.shared.rtt_ms(), ..e.info.clone() }).collect();
         v.sort_by(|a, b| a.name.cmp(&b.name));
         v
     }
@@ -152,7 +150,10 @@ impl HostServer {
         let clients = self.ctx.clients.lock().unwrap();
         match clients.get(id) {
             Some(e) => {
-                let _ = super::try_send(&e.outbox, Outgoing::untimed(Message::Bye { reason: super::client::BYE_KICKED.into() }));
+                let _ = super::try_send(
+                    &e.outbox,
+                    Outgoing::untimed(Message::Bye { reason: super::client::BYE_KICKED.into() }),
+                );
                 // Give the writer a moment to flush the goodbye, then close.
                 let shared = e.shared.clone();
                 thread::spawn(move || {
@@ -169,7 +170,8 @@ impl HostServer {
     pub fn latency_test(&self, id: &str, count: u32) -> io::Result<(String, u32, LatencySummary)> {
         let (name, outbox, shared) = {
             let clients = self.ctx.clients.lock().unwrap();
-            let e = clients.get(id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "client is not connected"))?;
+            let e =
+                clients.get(id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "client is not connected"))?;
             (e.info.name.clone(), e.outbox.clone(), e.shared.clone())
         };
         let (n, s) = super::latency_test(&outbox, &shared, count, Duration::from_millis(10))?;
@@ -185,14 +187,20 @@ impl HostServer {
             return;
         }
         for e in self.ctx.clients.lock().unwrap().values() {
-            let _ = super::try_send(&e.outbox, Outgoing::untimed(Message::Bye { reason: "the host stopped sharing".into() }));
+            let _ = super::try_send(
+                &e.outbox,
+                Outgoing::untimed(Message::Bye { reason: "the host stopped sharing".into() }),
+            );
         }
         thread::sleep(Duration::from_millis(50));
         for e in self.ctx.clients.lock().unwrap().values() {
             e.shared.close();
         }
         // Wake the blocking accept().
-        let _ = TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, self.addr.port())), Duration::from_millis(500));
+        let _ = TcpStream::connect_timeout(
+            &SocketAddr::from((Ipv4Addr::LOCALHOST, self.addr.port())),
+            Duration::from_millis(500),
+        );
         if let Some(t) = self.accept.take() {
             let _ = t.join();
         }
@@ -295,7 +303,9 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         };
         let (peer, mut w, newly) = hello_and_authorize(&mut r, w, remote, addr, &auth).map_err(|e| e.to_string())?;
         if newly {
-            ctx.trust.add(&peer.public, &peer.name, TrustRole::Client, Some(addr.to_string())).map_err(|e| e.to_string())?;
+            ctx.trust
+                .add(&peer.public, &peer.name, TrustRole::Client, Some(addr.to_string()))
+                .map_err(|e| e.to_string())?;
             log::info!("paired with {} ({})", peer.name, peer.id);
         } else {
             let _ = ctx.trust.touch(&peer.id, &peer.name, Some(addr.to_string()));

@@ -13,12 +13,12 @@ use moush_engine::client::{ClientEngine, ClientOptions, ClientState, ConnectTarg
 use moush_engine::clipboard::ClipboardService;
 use moush_engine::core::crypto::Identity;
 use moush_engine::core::discovery;
+use moush_engine::core::features::{self as feat, cap};
 use moush_engine::core::pairing::PairingBroker;
 use moush_engine::core::protocol::MonitorDesc;
 use moush_engine::core::stats::Stats;
 use moush_engine::core::trust::{TrustRole, TrustStore};
 use moush_engine::core::util::now_ms;
-use moush_engine::core::features::{self as feat, cap};
 use moush_engine::discovered::DiscoveryCache;
 use moush_engine::features::FeatureHub;
 use moush_engine::host::{HostEngine, HostOptions, Notify};
@@ -86,7 +86,12 @@ impl App {
             host_error: Mutex::new(None),
             process: Mutex::new(ProcessMonitor::new()),
             started: Instant::now(),
-            platform: Mutex::new(PlatformInfo { os_build, windows11: os_build >= 22000, mica: false, elevated: system::is_elevated() }),
+            platform: Mutex::new(PlatformInfo {
+                os_build,
+                windows11: os_build >= 22000,
+                mica: false,
+                elevated: system::is_elevated(),
+            }),
             notify,
             hub: FeatureHub::new(),
             clipboard: OnceLock::new(),
@@ -394,7 +399,9 @@ impl App {
         let old = self.config();
         // The UI never owns this field; keep what the backend recorded.
         new.last_host_address = old.settings.last_host_address.clone();
-        if new.launch_at_startup != old.settings.launch_at_startup || new.launch_at_startup != system::launch_at_startup_enabled() {
+        if new.launch_at_startup != old.settings.launch_at_startup
+            || new.launch_at_startup != system::launch_at_startup_enabled()
+        {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             system::set_launch_at_startup(new.launch_at_startup, &exe, "--autostart")
                 .map_err(|e| format!("could not change the startup setting: {e}"))?;
@@ -743,7 +750,8 @@ fn emit_loop(rx: Receiver<()>, app: std::sync::Weak<App>, handle: AppHandle) {
         if new_prompt || new_transfer {
             crate::show_main_window(&handle);
         }
-        let running = snap.host.as_ref().is_some_and(|h| h.running) || snap.client.as_ref().is_some_and(|c| c.state != "idle");
+        let running =
+            snap.host.as_ref().is_some_and(|h| h.running) || snap.client.as_ref().is_some_and(|c| c.state != "idle");
         let peers = snap.features.peers.iter().map(|p| (p.id.clone(), p.name.clone())).collect();
         connections.update(&app, peers, running);
         if let Err(e) = handle.emit("snapshot", &snap) {

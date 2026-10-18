@@ -32,7 +32,11 @@ pub fn start(app: &Arc<App>, device_id: String) -> Result<Arc<ClipboardService>,
             settings: Box::new(move || match settings.upgrade() {
                 Some(a) => {
                     let s = a.config().settings;
-                    ClipboardConfig { window_bytes: s.transfer.window_bytes(), clipboard: s.clipboard, device_name: s.device_name }
+                    ClipboardConfig {
+                        window_bytes: s.transfer.window_bytes(),
+                        clipboard: s.clipboard,
+                        device_name: s.device_name,
+                    }
                 }
                 None => ClipboardConfig {
                     clipboard: ClipboardSettings { enabled: false, ..Default::default() },
@@ -46,7 +50,12 @@ pub fn start(app: &Arc<App>, device_id: String) -> Result<Arc<ClipboardService>,
                     ClipboardEvent::Changed => app.notify(),
                     // Contents never go into notifications (they would end up in the log).
                     ClipboardEvent::ClipReceived { from, kind } => {
-                        notify::send(&app, Kind::Clipboard, "Clipboard updated", &format!("{} copied on {from}", kind_label(kind)));
+                        notify::send(
+                            &app,
+                            Kind::Clipboard,
+                            "Clipboard updated",
+                            &format!("{} copied on {from}", kind_label(kind)),
+                        );
                     }
                     ClipboardEvent::TextShared { from, chars, is_link } => {
                         let (title, body) = if is_link {

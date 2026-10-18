@@ -13,37 +13,39 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED};
-use windows::Win32::System::RemoteDesktop::{WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION};
+use windows::Win32::System::Power::{ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState};
+use windows::Win32::System::RemoteDesktop::{
+    NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
+};
 use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, CreateCursor, GetForegroundWindow, GetWindowThreadProcessId, IsWindow, KillTimer, SetForegroundWindow,
-    SetTimer, WM_TIMER, CreateWindowExW, DefWindowProcW, DestroyCursor, DestroyWindow, DispatchMessageW,
-    GetCursorPos, GetMessageW, PostThreadMessageW, RegisterClassExW, SetCursor, SetCursorPos, SetLayeredWindowAttributes,
-    SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, HCURSOR, HHOOK, HWND_TOPMOST,
-    KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LLKHF_INJECTED, LLKHF_UP, LLMHF_INJECTED, LWA_ALPHA, MA_NOACTIVATE, MSG,
-    MSLLHOOKSTRUCT, SWP_NOACTIVATE, SW_HIDE, SW_SHOWNOACTIVATE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_DISPLAYCHANGE,
+    CallNextHookEx, CreateCursor, CreateWindowExW, DefWindowProcW, DestroyCursor, DestroyWindow, DispatchMessageW,
+    GetCursorPos, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HCURSOR, HHOOK, HWND_TOPMOST, IsWindow,
+    KBDLLHOOKSTRUCT, KillTimer, LLKHF_EXTENDED, LLKHF_INJECTED, LLKHF_UP, LLMHF_INJECTED, LWA_ALPHA, MA_NOACTIVATE,
+    MSG, MSLLHOOKSTRUCT, PostThreadMessageW, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetCursor,
+    SetCursorPos, SetForegroundWindow, SetLayeredWindowAttributes, SetTimer, SetWindowPos, SetWindowsHookExW,
+    ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_DISPLAYCHANGE,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEHWHEEL,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_WTSSESSION_CHANGE, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+    WM_TIMER, WM_WTSSESSION_CHANGE, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_POPUP, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK,
 };
+use windows::core::{PCWSTR, w};
 
 use moush_core::geometry::{Layout, Point};
 use moush_core::inject::Injector;
-use moush_core::net::{try_send, Outbox, Outgoing};
+use moush_core::net::{Outbox, Outgoing, try_send};
 use moush_core::protocol::{MouseButton, WheelAxis};
 use moush_core::router::{Action, RawInput, Router, RouterSettings, Verdict};
 use moush_core::stats::Stats;
@@ -100,7 +102,12 @@ pub struct Capture {
 
 impl Capture {
     /// Starts the capture thread and installs the hooks. Fails if Windows refuses the hooks.
-    pub fn start(layout: Layout, settings: RouterSettings, stats: Arc<Stats>, events: Arc<dyn CaptureEvents>) -> io::Result<Self> {
+    pub fn start(
+        layout: Layout,
+        settings: RouterSettings,
+        stats: Arc<Stats>,
+        events: Arc<dyn CaptureEvents>,
+    ) -> io::Result<Self> {
         if std::env::var_os("MOUSH_TEST_ACCEPT_INJECTED").is_some() {
             log::warn!("test mode: synthetic input is routed like physical input");
             ACCEPT_INJECTED.store(true, Ordering::Relaxed);
@@ -554,7 +561,9 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
         note_event();
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let msg = wparam.0 as u32;
-        if is_foreign(info.flags & LLKHF_INJECTED == LLKHF_INJECTED, info.dwExtraInfo) || !(1..=0xFE).contains(&info.vkCode) {
+        if is_foreign(info.flags & LLKHF_INJECTED == LLKHF_INJECTED, info.dwExtraInfo)
+            || !(1..=0xFE).contains(&info.vkCode)
+        {
             return unsafe { CallNextHookEx(None, code, wparam, lparam) };
         }
         let down = matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN) && info.flags & LLKHF_UP != LLKHF_UP;
@@ -662,9 +671,9 @@ mod tests {
 
     use moush_core::geometry::{ClientPlacement, Rect, Screen};
     use moush_core::keys::{self, ShortcutSet};
-    use moush_core::protocol::{key_flags, Message};
+    use moush_core::protocol::{Message, key_flags};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY,
     };
 
     const VK_F23: u16 = 0x86;
@@ -741,7 +750,8 @@ mod tests {
                 scale: 1.0,
             }],
         };
-        let settings = RouterSettings { local_shortcuts: ShortcutSet::parse(&["Ctrl+Shift+F23"]).0, ..RouterSettings::default() };
+        let settings =
+            RouterSettings { local_shortcuts: ShortcutSet::parse(&["Ctrl+Shift+F23"]).0, ..RouterSettings::default() };
         let capture = Capture::start(layout, settings, Arc::new(Stats::new()), Arc::new(NoEvents)).expect("hooks");
         let (tx, rx) = sync_channel(256);
         capture.send(CaptureCmd::AddClient { id: "c".into(), outbox: tx });
@@ -769,7 +779,12 @@ mod tests {
         tap(keys::VK_LCONTROL, false);
         assert_eq!(
             keys_of(&drain(&rx)),
-            vec![(keys::VK_LCONTROL, true), (keys::VK_LSHIFT, true), (keys::VK_LSHIFT, false), (keys::VK_LCONTROL, false)]
+            vec![
+                (keys::VK_LCONTROL, true),
+                (keys::VK_LSHIFT, true),
+                (keys::VK_LSHIFT, false),
+                (keys::VK_LCONTROL, false)
+            ]
         );
         assert!(host_has_combo, "Ctrl+Shift+F23 was not re-pressed on the host");
         for vk in [keys::VK_LCONTROL, keys::VK_LSHIFT, VK_F23] {

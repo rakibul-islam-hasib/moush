@@ -19,12 +19,12 @@ use std::thread;
 use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, POINT, RECT};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetAncestor, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect,
-    GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, GWL_STYLE,
-    WS_DISABLED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
+    BringWindowToTop, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GetAncestor, GetClassNameW, GetCursorPos, GetForegroundWindow,
+    GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow, WS_DISABLED,
+    WS_EX_NOACTIVATE, WS_EX_TRANSPARENT, WindowFromPoint,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,7 +66,10 @@ pub fn focus_window(target: HWND) -> FocusOutcome {
     }
     let style = unsafe { GetWindowLongW(target, GWL_STYLE) } as u32;
     let ex = unsafe { GetWindowLongW(target, GWL_EXSTYLE) } as u32;
-    if !unsafe { IsWindowVisible(target) }.as_bool() || style & WS_DISABLED.0 != 0 || ex & (WS_EX_NOACTIVATE.0 | WS_EX_TRANSPARENT.0) != 0 {
+    if !unsafe { IsWindowVisible(target) }.as_bool()
+        || style & WS_DISABLED.0 != 0
+        || ex & (WS_EX_NOACTIVATE.0 | WS_EX_TRANSPARENT.0) != 0
+    {
         return FocusOutcome::Skipped("window cannot be activated");
     }
     if !is_shell_window(fg) && is_full_screen(fg) {
@@ -145,13 +148,13 @@ fn run(rx: Receiver<()>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use windows::core::w;
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostThreadMessageW, RegisterClassExW,
-        ShowWindow, MSG, SW_SHOWNOACTIVATE, WINDOW_EX_STYLE, WM_QUIT, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, MSG, PostThreadMessageW,
+        RegisterClassExW, SW_SHOWNOACTIVATE, ShowWindow, WINDOW_EX_STYLE, WM_QUIT, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
     };
+    use windows::core::w;
 
     unsafe extern "system" fn proc_(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         unsafe { DefWindowProcW(h, m, w, l) }
@@ -211,7 +214,9 @@ mod tests {
             let _ = PostThreadMessageW(ui_thread, WM_QUIT, WPARAM(0), LPARAM(0));
         }
         ui.join().unwrap();
-        println!("foreground before {before:?}, target {target:?}: {outcome:?}, after {after:?}; restore: {restored:?}");
+        println!(
+            "foreground before {before:?}, target {target:?}: {outcome:?}, after {after:?}; restore: {restored:?}"
+        );
         assert_ne!(before, target, "the test window must start in the background");
         assert_eq!(outcome, FocusOutcome::Focused);
         assert_eq!(after, target);

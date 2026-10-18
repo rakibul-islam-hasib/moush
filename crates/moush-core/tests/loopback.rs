@@ -12,11 +12,11 @@ use std::time::{Duration, Instant};
 use moush_core::crypto::Identity;
 use moush_core::flow::{Acquire, Window};
 use moush_core::inject::{InjectState, Injector};
-use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
+use moush_core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
 use moush_core::net::host::{ClientHandle, HostEvents, HostServer};
 use moush_core::net::{Outgoing, PeerInfo, PeerSender};
 use moush_core::pairing::PairingBroker;
-use moush_core::protocol::{key_flags, Message, MonitorDesc, MouseButton, MAX_FEATURE_BODY};
+use moush_core::protocol::{MAX_FEATURE_BODY, Message, MonitorDesc, MouseButton, key_flags};
 use moush_core::stats::{LatencyRing, Stats};
 use moush_core::trust::TrustStore;
 use moush_core::util::mono_us;
@@ -176,7 +176,11 @@ fn rig(host_answer: bool) -> Rig {
 }
 
 /// Starts a client session on a thread; returns its injected events and final result.
-fn start_client(rig: &Rig, stop: Arc<AtomicBool>, link: Arc<ClientLink>) -> (Receiver<(Ev, u64)>, thread::JoinHandle<SessionEnd>) {
+fn start_client(
+    rig: &Rig,
+    stop: Arc<AtomicBool>,
+    link: Arc<ClientLink>,
+) -> (Receiver<(Ev, u64)>, thread::JoinHandle<SessionEnd>) {
     start_client_with(rig, stop, link, Arc::new(NoEvents))
 }
 
@@ -309,7 +313,10 @@ fn latency_over_loopback() {
         let down = i % 2 == 0;
         client
             .outbox
-            .send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } }, t_us: t })
+            .send(Outgoing {
+                msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } },
+                t_us: t,
+            })
             .unwrap();
         let (_, at) = events.recv_timeout(Duration::from_secs(5)).unwrap();
         ring.record(at.saturating_sub(t) as u32);
@@ -402,7 +409,10 @@ fn feature_traffic_flows_both_ways_without_starving_input() {
         let down = i % 2 == 0;
         client
             .outbox
-            .send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } }, t_us: t })
+            .send(Outgoing {
+                msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } },
+                t_us: t,
+            })
             .unwrap();
         let (_, at) = events.recv_timeout(Duration::from_secs(5)).unwrap();
         ring.record(at.saturating_sub(t) as u32);

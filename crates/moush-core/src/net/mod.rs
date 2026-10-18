@@ -27,9 +27,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::crypto::{device_id, FrameReader, FrameWriter, SecureChannel, MAX_FRAME_PLAINTEXT};
+use crate::crypto::{FrameReader, FrameWriter, MAX_FRAME_PLAINTEXT, SecureChannel, device_id};
 use crate::pairing::{PairingBroker, PairingRequest};
-use crate::protocol::{self, Message, PeerRole, PROTOCOL_VERSION};
+use crate::protocol::{self, Message, PROTOCOL_VERSION, PeerRole};
 use crate::stats::{LatencySummary, Stats};
 use crate::trust::{TrustRole, TrustStore};
 use crate::util::{mono_ms, mono_us};
@@ -328,7 +328,11 @@ impl MsgWriter {
     }
 }
 
-pub(crate) fn split_channel(ch: SecureChannel, stream: &TcpStream, stats: &Arc<Stats>) -> io::Result<(MsgReader, MsgWriter)> {
+pub(crate) fn split_channel(
+    ch: SecureChannel,
+    stream: &TcpStream,
+    stats: &Arc<Stats>,
+) -> io::Result<(MsgReader, MsgWriter)> {
     let (fr, fw) = ch.split(BufReader::with_capacity(64 * 1024, stream.try_clone()?), stream.try_clone()?);
     Ok((
         MsgReader { fr, queue: VecDeque::new(), batch: Vec::with_capacity(64), stats: stats.clone() },
@@ -461,7 +465,12 @@ pub(crate) fn run_writer(
 }
 
 /// Sends `count` pings `interval` apart through `outbox` and measures their RTT.
-pub fn latency_test(outbox: &Outbox, shared: &ConnShared, count: u32, interval: Duration) -> io::Result<(u32, LatencySummary)> {
+pub fn latency_test(
+    outbox: &Outbox,
+    shared: &ConnShared,
+    count: u32,
+    interval: Duration,
+) -> io::Result<(u32, LatencySummary)> {
     let (tx, rx) = mpsc::channel();
     *shared.probe.lock().unwrap() = Some(tx);
     let mut ring = crate::stats::LatencyRing::default();
@@ -610,7 +619,9 @@ pub(crate) fn hello_and_authorize(
         let _ = w.lock().unwrap().send(&[Message::Bye { reason: reason.to_owned() }]);
     };
     if version != PROTOCOL_VERSION {
-        let msg = format!("protocol version mismatch (ours {PROTOCOL_VERSION}, theirs {version}); update Moush on both computers");
+        let msg = format!(
+            "protocol version mismatch (ours {PROTOCOL_VERSION}, theirs {version}); update Moush on both computers"
+        );
         bye(&w, &msg);
         return Err(AuthError::Incompatible(msg));
     }
@@ -664,16 +675,19 @@ pub(crate) fn hello_and_authorize(
             // Wait for the local user on a helper thread while this thread reads the peer.
             let w2 = w.clone();
             let tid = t.id().to_owned();
-            decision = Some((tid, thread::spawn(move || {
-                let d = t.wait(PAIRING_TIMEOUT);
-                let accept = d == Some(true);
-                let mut w = w2.lock().unwrap();
-                let _ = w.send(&[Message::Authorize { accept }]);
-                if !accept {
-                    let _ = w.send(&[Message::Bye { reason: "pairing was rejected on the other computer".into() }]);
-                }
-                (d, t)
-            })));
+            decision = Some((
+                tid,
+                thread::spawn(move || {
+                    let d = t.wait(PAIRING_TIMEOUT);
+                    let accept = d == Some(true);
+                    let mut w = w2.lock().unwrap();
+                    let _ = w.send(&[Message::Authorize { accept }]);
+                    if !accept {
+                        let _ = w.send(&[Message::Bye { reason: "pairing was rejected on the other computer".into() }]);
+                    }
+                    (d, t)
+                }),
+            ));
         }
         r.stream().set_read_timeout(Some(PAIRING_TIMEOUT + Duration::from_secs(5)))?;
     }
@@ -704,7 +718,10 @@ pub(crate) fn hello_and_authorize(
                 if !wait_while_connected(r.stream(), &handle) {
                     ctx.broker.cancel(&tid);
                     let _ = handle.join();
-                    return Err(AuthError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, "the other computer left")));
+                    return Err(AuthError::Io(io::Error::new(
+                        io::ErrorKind::ConnectionAborted,
+                        "the other computer left",
+                    )));
                 }
                 handle.join().map_err(|_| AuthError::RejectedLocally)?
             }
@@ -759,7 +776,7 @@ fn wait_while_connected<T>(stream: &TcpStream, handle: &thread::JoinHandle<T>) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{handshake, Identity};
+    use crate::crypto::{Identity, handshake};
     use crate::protocol::MAX_FEATURE_BODY;
     use std::net::{Ipv4Addr, TcpListener};
 

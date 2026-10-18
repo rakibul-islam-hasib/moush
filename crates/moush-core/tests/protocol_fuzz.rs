@@ -6,8 +6,8 @@
 //! is canonical, so a decoder bug that "accepts and reinterprets" shows up as a mismatch).
 
 use moush_core::protocol::{
-    decode_all, encode, encoded_len, key_flags, wire, DecodeError, Message, MonitorDesc, MouseButton, PeerRole, Reader,
-    WheelAxis, MAX_COORD, MAX_FEATURE_BODY, MAX_MONITORS, MAX_STRING,
+    DecodeError, MAX_COORD, MAX_FEATURE_BODY, MAX_MONITORS, MAX_STRING, Message, MonitorDesc, MouseButton, PeerRole,
+    Reader, WheelAxis, decode_all, encode, encoded_len, key_flags, wire,
 };
 
 /// xorshift64*: small, fast and reproducible.
@@ -72,7 +72,10 @@ fn random_message(r: &mut Rng) -> Message {
         5 => Message::Leave,
         6 => Message::MouseMove { x: coord(r), y: coord(r) },
         7 => Message::MouseButton { button: MouseButton::ALL[r.below(5) as usize], down: r.bool() },
-        8 => Message::Wheel { axis: if r.bool() { WheelAxis::Vertical } else { WheelAxis::Horizontal }, delta: r.next() as i16 },
+        8 => Message::Wheel {
+            axis: if r.bool() { WheelAxis::Vertical } else { WheelAxis::Horizontal },
+            delta: r.next() as i16,
+        },
         9 => Message::Key { vk: 1 + r.below(0xFE) as u16, scan: r.next() as u16, flags: r.byte() & key_flags::ALL },
         10 => Message::ReleaseAll,
         11 => Message::Ping { id: r.next() as u32, t_us: r.next() },

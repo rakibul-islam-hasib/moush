@@ -513,13 +513,33 @@ pub struct Offer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ClipMsg {
     Offer(Offer),
-    Chunk { xfer: u32, offset: u32, data: Vec<u8> },
-    Ack { xfer: u32, bytes: u32 },
-    Abort { xfer: u32 },
-    Reject { xfer: u32, reason: u8 },
+    Chunk {
+        xfer: u32,
+        offset: u32,
+        data: Vec<u8>,
+    },
+    Ack {
+        xfer: u32,
+        bytes: u32,
+    },
+    Abort {
+        xfer: u32,
+    },
+    Reject {
+        xfer: u32,
+        reason: u8,
+    },
     /// Part of a shared text: `data` goes at `offset` of a `total`-byte UTF-8 text.
-    Share { id: u32, total: u32, offset: u32, is_last: bool, data: Vec<u8> },
-    Clock { stamp: u64 },
+    Share {
+        id: u32,
+        total: u32,
+        offset: u32,
+        is_last: bool,
+        data: Vec<u8>,
+    },
+    Clock {
+        stamp: u64,
+    },
 }
 
 impl ClipMsg {
@@ -600,7 +620,15 @@ impl ClipMsg {
                 if wire_len == 0 || wire_len as usize > raw_len as usize + MAX_PAYLOAD_OVERHEAD {
                     return Err(DecodeError::Invalid("payload size"));
                 }
-                ClipMsg::Offer(Offer { xfer, version: Version { stamp, origin }, origin_name, hash, kind, raw_len, wire_len })
+                ClipMsg::Offer(Offer {
+                    xfer,
+                    version: Version { stamp, origin },
+                    origin_name,
+                    hash,
+                    kind,
+                    raw_len,
+                    wire_len,
+                })
             }
             kind::CHUNK => {
                 let xfer = r.u32()?;
@@ -621,7 +649,12 @@ impl ClipMsg {
                 let is_last = r.bool()?;
                 let data = r.bytes(MAX_CHUNK_DATA)?;
                 let end = offset as usize + data.len();
-                if total == 0 || total as usize > MAX_SHARE_TEXT || data.is_empty() || end > total as usize || is_last != (end == total as usize) {
+                if total == 0
+                    || total as usize > MAX_SHARE_TEXT
+                    || data.is_empty()
+                    || end > total as usize
+                    || is_last != (end == total as usize)
+                {
                     return Err(DecodeError::Invalid("shared text part"));
                 }
                 ClipMsg::Share { id, total, offset, is_last, data: data.to_vec() }
@@ -766,7 +799,10 @@ pub struct Current {
 pub enum Decision {
     Accept,
     /// Refuse with a [`reject`] reason. `send_back`: our clip is newer, send it to the peer.
-    Reject { reason: u8, send_back: bool },
+    Reject {
+        reason: u8,
+        send_back: bool,
+    },
 }
 
 /// The clipboard sync state machine of one device (see the module docs for the rules).
@@ -1025,7 +1061,9 @@ mod tests {
         let mut slot = None;
         let mut done = None;
         for p in parts {
-            let ClipMsg::Share { id, total, offset, data, .. } = ClipMsg::decode(&p.encode()).unwrap() else { panic!() };
+            let ClipMsg::Share { id, total, offset, data, .. } = ClipMsg::decode(&p.encode()).unwrap() else {
+                panic!()
+            };
             match ShareAssembler::push(&mut slot, id, total, offset, &data) {
                 ShareResult::More => {}
                 ShareResult::Done(t) => done = Some(t),
@@ -1084,7 +1122,8 @@ mod tests {
         assert!(ClipMsg::decode(&chunk).is_err(), "oversized chunk");
         let share = ClipMsg::Share { id: 1, total: 4, offset: 2, is_last: true, data: vec![1, 2, 3] };
         assert!(ClipMsg::decode(&share.encode()).is_err(), "part beyond total");
-        let share = ClipMsg::Share { id: 1, total: MAX_SHARE_TEXT as u32 + 1, offset: 0, is_last: false, data: vec![1] };
+        let share =
+            ClipMsg::Share { id: 1, total: MAX_SHARE_TEXT as u32 + 1, offset: 0, is_last: false, data: vec![1] };
         assert!(ClipMsg::decode(&share.encode()).is_err(), "share too long");
         // Bad UTF-8 in a shared text.
         let mut slot = None;
@@ -1188,7 +1227,12 @@ mod tests {
         let fitted = img.clone().fit(img.dib.as_ref().unwrap().len()).unwrap();
         assert!(fitted.png.is_none() && fitted.dib.is_some(), "png dropped first");
         assert!(img.fit(100).is_none());
-        let rich = Clip { text: Some("x".repeat(10)), html: Some(vec![b'h'; 50]), rtf: Some(vec![b'r'; 50]), ..Default::default() };
+        let rich = Clip {
+            text: Some("x".repeat(10)),
+            html: Some(vec![b'h'; 50]),
+            rtf: Some(vec![b'r'; 50]),
+            ..Default::default()
+        };
         assert_eq!(rich.clone().fit(65).unwrap().rtf, None);
         assert_eq!(rich.clone().fit(10).unwrap(), Clip::text("x".repeat(10)));
         assert!(rich.fit(9).is_none());
@@ -1200,7 +1244,16 @@ mod tests {
     fn links() {
         assert_eq!(as_link("  https://example.com/a?b=c#d \n"), Some("https://example.com/a?b=c#d"));
         assert_eq!(as_link("HTTP://Example.com"), Some("HTTP://Example.com"));
-        for bad in ["ftp://x", "https://", "https:///path", "https://a b", "see https://a.com", "javascript:alert(1)", "file:///c:/x", "https://a\"b"] {
+        for bad in [
+            "ftp://x",
+            "https://",
+            "https:///path",
+            "https://a b",
+            "see https://a.com",
+            "javascript:alert(1)",
+            "file:///c:/x",
+            "https://a\"b",
+        ] {
             assert_eq!(as_link(bad), None, "{bad}");
         }
         assert!(validate_share_text("  ").is_err());
@@ -1273,10 +1326,16 @@ mod tests {
         // An older clip arriving later (or finishing later) is stale; the peer already has ours.
         assert_eq!(s.check("a", &old, 1), Decision::Reject { reason: reject::STALE, send_back: false });
         // A different peer with an older clip gets ours sent back.
-        assert_eq!(s.check("c", &Version { stamp: 15, origin: "c".into() }, 3), Decision::Reject { reason: reject::STALE, send_back: true });
+        assert_eq!(
+            s.check("c", &Version { stamp: 15, origin: "c".into() }, 3),
+            Decision::Reject { reason: reject::STALE, send_back: true }
+        );
         // A local copy during a transfer makes the transfer stale when it completes.
         s.local_change(Some(5), 9, 0).unwrap();
-        assert!(matches!(s.check("a", &Version { stamp: 21, origin: "a".into() }, 4), Decision::Reject { reason: reject::STALE, .. }));
+        assert!(matches!(
+            s.check("a", &Version { stamp: 21, origin: "a".into() }, 4),
+            Decision::Reject { reason: reject::STALE, .. }
+        ));
     }
 
     /// Simulated star network: offers are delivered in a chosen order; every node runs
@@ -1321,7 +1380,10 @@ mod tests {
 
     fn star() -> HashMap<String, Node> {
         let mut nodes = HashMap::new();
-        nodes.insert("h".into(), Node { s: SyncState::new("h"), content: None, peers: vec!["a".into(), "b".into(), "c".into()] });
+        nodes.insert(
+            "h".into(),
+            Node { s: SyncState::new("h"), content: None, peers: vec!["a".into(), "b".into(), "c".into()] },
+        );
         for c in ["a", "b", "c"] {
             nodes.insert(c.into(), Node { s: SyncState::new(c), content: None, peers: vec!["h".into()] });
         }

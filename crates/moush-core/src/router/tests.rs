@@ -76,7 +76,10 @@ fn ku(vk: u16) -> Message {
 }
 
 fn mask() -> Vec<Message> {
-    vec![Message::Key { vk: keys::VK_MASK, scan: 0, flags: key_flags::DOWN }, Message::Key { vk: keys::VK_MASK, scan: 0, flags: 0 }]
+    vec![
+        Message::Key { vk: keys::VK_MASK, scan: 0, flags: key_flags::DOWN },
+        Message::Key { vk: keys::VK_MASK, scan: 0, flags: 0 },
+    ]
 }
 
 /// Pushes the cursor against the left edge of monitor 1 at height `y`.
@@ -775,7 +778,17 @@ fn every_press_gets_exactly_one_release_somewhere() {
     // setting changes. Invariant: per computer, presses and releases of each key balance
     // once everything is released (the client also releases on Leave).
     let mut r = Router::new(desk_with_tablet(), RouterSettings::default());
-    let vks = [0x41, 0x42, keys::VK_TAB, keys::VK_ESCAPE, keys::VK_LSHIFT, keys::VK_LCONTROL, keys::VK_LMENU, keys::VK_LWIN, keys::VK_LEFT];
+    let vks = [
+        0x41,
+        0x42,
+        keys::VK_TAB,
+        keys::VK_ESCAPE,
+        keys::VK_LSHIFT,
+        keys::VK_LCONTROL,
+        keys::VK_LMENU,
+        keys::VK_LWIN,
+        keys::VK_LEFT,
+    ];
     let mut host = [0i32; 256];
     let mut clients: std::collections::HashMap<String, [i32; 256]> = Default::default();
     let mut physical = [false; 256];
@@ -865,7 +878,9 @@ fn every_press_gets_exactly_one_release_somewhere() {
     for vk in vks {
         if physical[vk as usize] {
             let mut out = Vec::new();
-            if r.handle(RawInput::Key { vk, scan: vk, extended: false, down: false }, PARK, 30_000, &mut out) == Verdict::Pass {
+            if r.handle(RawInput::Key { vk, scan: vk, extended: false, down: false }, PARK, 30_000, &mut out)
+                == Verdict::Pass
+            {
                 host[vk as usize] = 0;
             }
             apply(&out, &mut host, &mut clients);

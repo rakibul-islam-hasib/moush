@@ -11,17 +11,17 @@
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, SyncSender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, SyncSender};
 use std::thread;
 
-use windows::core::{IInspectable, Ref, HSTRING, PCWSTR};
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::Foundation::TypedEventHandler;
-use windows::Win32::Foundation::ERROR_SUCCESS;
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
-use windows::Win32::System::Registry::{RegSetKeyValueW, HKEY_CURRENT_USER, REG_SZ};
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastNotifier};
+use windows::Win32::Foundation::ERROR_SUCCESS;
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW};
+use windows::core::{HSTRING, IInspectable, PCWSTR, Ref};
 
 /// Queued notifications beyond this are dropped (a burst of events is not worth more).
 const QUEUE: usize = 16;
@@ -34,7 +34,12 @@ pub struct Toaster {
 impl Toaster {
     /// Starts the delivery thread. `icon` is a PNG shown with the app name when the app
     /// is not installed; `on_click` runs (on a WinRT thread) when the user clicks a toast.
-    pub fn start(aumid: &str, display_name: &str, icon: Option<PathBuf>, on_click: impl Fn() + Send + Sync + 'static) -> Self {
+    pub fn start(
+        aumid: &str,
+        display_name: &str,
+        icon: Option<PathBuf>,
+        on_click: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         let (tx, rx) = mpsc::sync_channel::<(String, String)>(QUEUE);
         let aumid = aumid.to_owned();
         let display_name = display_name.to_owned();
@@ -69,7 +74,12 @@ impl Toaster {
     }
 }
 
-fn show(notifier: &ToastNotifier, title: &str, body: &str, on_click: &Arc<dyn Fn() + Send + Sync>) -> windows::core::Result<()> {
+fn show(
+    notifier: &ToastNotifier,
+    title: &str,
+    body: &str,
+    on_click: &Arc<dyn Fn() + Send + Sync>,
+) -> windows::core::Result<()> {
     let xml = format!(
         "<toast><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text></binding></visual></toast>",
         escape(title),
@@ -118,7 +128,14 @@ fn register(aumid: &str, display_name: &str, icon: Option<&PathBuf>) {
         let name = wide(name);
         let data = wide(&value);
         let r = unsafe {
-            RegSetKeyValueW(HKEY_CURRENT_USER, PCWSTR(key.as_ptr()), PCWSTR(name.as_ptr()), REG_SZ.0, Some(data.as_ptr().cast()), (data.len() * 2) as u32)
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                PCWSTR(key.as_ptr()),
+                PCWSTR(name.as_ptr()),
+                REG_SZ.0,
+                Some(data.as_ptr().cast()),
+                (data.len() * 2) as u32,
+            )
         };
         if r != ERROR_SUCCESS {
             log::debug!("cannot register the notification identity: {r:?}");

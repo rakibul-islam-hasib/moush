@@ -7,15 +7,15 @@ use std::mem::size_of;
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 
-use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetWindowLongPtrW, PostThreadMessageW,
-    RegisterClassExW, SetWindowLongPtrW, GWLP_USERDATA, MSG, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_QUIT, WNDCLASSEXW,
-    WS_EX_TOOLWINDOW, WS_OVERLAPPED,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetWindowLongPtrW,
+    MSG, PostThreadMessageW, RegisterClassExW, SetWindowLongPtrW, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_QUIT,
+    WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_OVERLAPPED,
 };
+use windows::core::{PCWSTR, w};
 
 use super::dpi::make_thread_dpi_aware;
 
@@ -43,7 +43,20 @@ impl DisplayWatcher {
             };
             let hwnd = unsafe {
                 RegisterClassExW(&wc);
-                CreateWindowExW(WS_EX_TOOLWINDOW, class, PCWSTR::null(), WS_OVERLAPPED, 0, 0, 0, 0, None, None, Some(hinst), None)
+                CreateWindowExW(
+                    WS_EX_TOOLWINDOW,
+                    class,
+                    PCWSTR::null(),
+                    WS_OVERLAPPED,
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    Some(hinst),
+                    None,
+                )
             };
             let hwnd = match hwnd {
                 Ok(h) => h,

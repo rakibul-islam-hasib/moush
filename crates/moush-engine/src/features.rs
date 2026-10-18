@@ -92,7 +92,11 @@ impl FeatureHub {
         let peers = self.peers.lock().unwrap();
         let mut v: Vec<PeerSummary> = peers
             .iter()
-            .map(|(id, p)| PeerSummary { id: id.clone(), name: p.name.clone(), effective_caps: p.local_caps & p.remote_caps })
+            .map(|(id, p)| PeerSummary {
+                id: id.clone(),
+                name: p.name.clone(),
+                effective_caps: p.local_caps & p.remote_caps,
+            })
             .collect();
         v.sort_by(|a, b| a.name.cmp(&b.name));
         v
@@ -100,7 +104,11 @@ impl FeatureHub {
 
     pub fn peer(&self, id: &str) -> Option<PeerSummary> {
         let peers = self.peers.lock().unwrap();
-        peers.get(id).map(|p| PeerSummary { id: id.to_owned(), name: p.name.clone(), effective_caps: p.local_caps & p.remote_caps })
+        peers.get(id).map(|p| PeerSummary {
+            id: id.to_owned(),
+            name: p.name.clone(),
+            effective_caps: p.local_caps & p.remote_caps,
+        })
     }
 
     pub fn sender(&self, id: &str) -> Option<PeerSender> {

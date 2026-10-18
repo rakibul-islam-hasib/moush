@@ -19,31 +19,32 @@
 
 use std::io;
 use std::mem::size_of;
-use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Storage::Compression::{
-    CloseCompressor, CloseDecompressor, Compress, CreateCompressor, CreateDecompressor, Decompress, COMPRESSOR_HANDLE,
-    COMPRESS_ALGORITHM_XPRESS_HUFF, DECOMPRESSOR_HANDLE,
+    COMPRESS_ALGORITHM_XPRESS_HUFF, COMPRESSOR_HANDLE, CloseCompressor, CloseDecompressor, Compress, CreateCompressor,
+    CreateDecompressor, DECOMPRESSOR_HANDLE, Decompress,
 };
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardSequenceNumber,
-    IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW, RemoveClipboardFormatListener, SetClipboardData,
+    IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW, RemoveClipboardFormatListener,
+    SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetWindowLongPtrW, PostMessageW,
-    RegisterClassExW, SetWindowLongPtrW, GWLP_USERDATA, HWND_MESSAGE, MSG, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetMessageW, GetWindowLongPtrW,
+    HWND_MESSAGE, MSG, PostMessageW, RegisterClassExW, SW_SHOWNORMAL, SetWindowLongPtrW, WINDOW_EX_STYLE, WINDOW_STYLE,
     WM_APP, WM_CLIPBOARDUPDATE, WNDCLASSEXW,
 };
+use windows::core::{PCWSTR, w};
 
-use moush_core::clipboard::{as_link, dib_len, png_len, Clip};
+use moush_core::clipboard::{Clip, as_link, dib_len, png_len};
 
 use crate::clipboard::{ChangeCallback, ClipboardBackend, LocalRead, ReadOptions};
 
@@ -161,10 +162,29 @@ impl Formats {
 fn run(on_change: ChangeCallback, rx: Receiver<Request>, ready: Sender<Result<isize, String>>) {
     let hinst: HINSTANCE = unsafe { GetModuleHandleW(None).map(|h| h.into()).unwrap_or_default() };
     let class = w!("MoushClipboardWindow");
-    let wc = WNDCLASSEXW { cbSize: size_of::<WNDCLASSEXW>() as u32, lpfnWndProc: Some(proc_), hInstance: hinst, lpszClassName: class, ..Default::default() };
+    let wc = WNDCLASSEXW {
+        cbSize: size_of::<WNDCLASSEXW>() as u32,
+        lpfnWndProc: Some(proc_),
+        hInstance: hinst,
+        lpszClassName: class,
+        ..Default::default()
+    };
     let hwnd = unsafe {
         RegisterClassExW(&wc);
-        CreateWindowExW(WINDOW_EX_STYLE(0), class, PCWSTR::null(), WINDOW_STYLE(0), 0, 0, 0, 0, Some(HWND_MESSAGE), None, Some(hinst), None)
+        CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            class,
+            PCWSTR::null(),
+            WINDOW_STYLE(0),
+            0,
+            0,
+            0,
+            0,
+            Some(HWND_MESSAGE),
+            None,
+            Some(hinst),
+            None,
+        )
     };
     let hwnd = match hwnd {
         Ok(h) => h,
@@ -187,10 +207,14 @@ fn run(on_change: ChangeCallback, rx: Receiver<Request>, ready: Sender<Result<is
         while let Ok(r) = rx.try_recv() {
             match r {
                 Request::Listen(on) if on != listening => {
-                    let r = unsafe { if on { AddClipboardFormatListener(hwnd) } else { RemoveClipboardFormatListener(hwnd) } };
+                    let r = unsafe {
+                        if on { AddClipboardFormatListener(hwnd) } else { RemoveClipboardFormatListener(hwnd) }
+                    };
                     match r {
                         Ok(()) => listening = on,
-                        Err(e) => log::warn!("cannot {} clipboard changes: {e}", if on { "watch" } else { "stop watching" }),
+                        Err(e) => {
+                            log::warn!("cannot {} clipboard changes: {e}", if on { "watch" } else { "stop watching" })
+                        }
                     }
                 }
                 Request::Listen(_) => {}
@@ -285,7 +309,8 @@ fn is_sensitive(f: &Formats) -> bool {
     if available(f.exclude) {
         return true;
     }
-    let dword_zero = |format| available(format) && data(format, 64).is_ok_and(|d| d.len() >= 4 && d[..4] == [0, 0, 0, 0]);
+    let dword_zero =
+        |format| available(format) && data(format, 64).is_ok_and(|d| d.len() >= 4 && d[..4] == [0, 0, 0, 0]);
     dword_zero(f.can_history) || dword_zero(f.can_cloud)
 }
 
@@ -309,7 +334,10 @@ fn read(hwnd: HWND, f: &Formats, opts: &ReadOptions) -> Result<LocalRead, String
     if opts.filter.text && has_text {
         // UTF-16: twice the bytes of ASCII text at most; checked again after conversion.
         clip.text = take(CF_UNICODETEXT, max.saturating_mul(2)).map(|v| {
-            let units: Vec<u16> = (0..v.len() / 2).map(|i| u16::from_le_bytes([v[2 * i], v[2 * i + 1]])).take_while(|u| *u != 0).collect();
+            let units: Vec<u16> = (0..v.len() / 2)
+                .map(|i| u16::from_le_bytes([v[2 * i], v[2 * i + 1]]))
+                .take_while(|u| *u != 0)
+                .collect();
             String::from_utf16_lossy(&units)
         });
         if clip.text.as_ref().is_some_and(|t| t.len() > max) {
@@ -388,7 +416,9 @@ pub fn compress(data: &[u8]) -> Option<Vec<u8>> {
     unsafe { CreateCompressor(COMPRESS_ALGORITHM_XPRESS_HUFF, None, &mut h) }.ok()?;
     let mut out = vec![0u8; data.len()];
     let mut n = 0usize;
-    let r = unsafe { Compress(h, Some(data.as_ptr().cast()), data.len(), Some(out.as_mut_ptr().cast()), out.len(), &mut n) };
+    let r = unsafe {
+        Compress(h, Some(data.as_ptr().cast()), data.len(), Some(out.as_mut_ptr().cast()), out.len(), &mut n)
+    };
     let _ = unsafe { CloseCompressor(h) };
     r.ok()?;
     (n < data.len()).then(|| {
@@ -403,7 +433,9 @@ pub fn decompress(data: &[u8], raw_len: usize) -> Option<Vec<u8>> {
     unsafe { CreateDecompressor(COMPRESS_ALGORITHM_XPRESS_HUFF, None, &mut h) }.ok()?;
     let mut out = vec![0u8; raw_len];
     let mut n = 0usize;
-    let r = unsafe { Decompress(h, Some(data.as_ptr().cast()), data.len(), Some(out.as_mut_ptr().cast()), out.len(), Some(&mut n)) };
+    let r = unsafe {
+        Decompress(h, Some(data.as_ptr().cast()), data.len(), Some(out.as_mut_ptr().cast()), out.len(), Some(&mut n))
+    };
     let _ = unsafe { CloseDecompressor(h) };
     r.ok()?;
     (n == raw_len).then_some(out)
@@ -411,9 +443,12 @@ pub fn decompress(data: &[u8], raw_len: usize) -> Option<Vec<u8>> {
 
 /// Opens an http(s) link in the default browser. The text is validated again here.
 pub fn open_url(text: &str) -> io::Result<()> {
-    let url = as_link(text).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "only http and https links can be opened"))?;
+    let url = as_link(text)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "only http and https links can be opened"))?;
     let wide: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
-    let r = unsafe { ShellExecuteW(None, w!("open"), PCWSTR(wide.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+    let r = unsafe {
+        ShellExecuteW(None, w!("open"), PCWSTR(wide.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+    };
     if r.0 as isize <= 32 {
         return Err(io::Error::other("the link could not be opened"));
     }
@@ -462,7 +497,8 @@ mod tests {
         cb.set_listening(true);
         thread::sleep(Duration::from_millis(100));
         let text = "Moush test \u{1F600}\r\n\u{4E2D}\u{6587}\r\nline 3";
-        let clip = Clip { text: Some(text.into()), html: Some(b"Version:0.9\r\n<b>x</b>".to_vec()), ..Default::default() };
+        let clip =
+            Clip { text: Some(text.into()), html: Some(b"Version:0.9\r\n<b>x</b>".to_vec()), ..Default::default() };
         let seq = cb.write(Arc::new(clip.clone())).unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
         while changes.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
@@ -470,8 +506,14 @@ mod tests {
         }
         assert!(changes.load(Ordering::SeqCst) > 0, "WM_CLIPBOARDUPDATE received");
         assert_eq!(cb.sequence(), seq, "nobody else wrote meanwhile");
-        let opts = ReadOptions { filter: FormatFilter { text: true, rich: true, images: true }, skip_sensitive: true, max_bytes: MAX_CLIP_BYTES };
-        let LocalRead::Clip { seq: read_seq, clip: back, oversized } = cb.read(&opts).unwrap() else { panic!("not sensitive") };
+        let opts = ReadOptions {
+            filter: FormatFilter { text: true, rich: true, images: true },
+            skip_sensitive: true,
+            max_bytes: MAX_CLIP_BYTES,
+        };
+        let LocalRead::Clip { seq: read_seq, clip: back, oversized } = cb.read(&opts).unwrap() else {
+            panic!("not sensitive")
+        };
         assert_eq!(read_seq, seq);
         assert!(!oversized);
         assert_eq!(back.text.as_deref(), Some(text));
@@ -492,7 +534,9 @@ mod tests {
         let LocalRead::Clip { clip: back, .. } = cb.read(&opts).unwrap() else { panic!() };
         assert_eq!(back.dib, img.dib);
         // Content marked the way password managers do is reported without being read.
-        for (name, value) in [("ExcludeClipboardContentFromMonitorProcessing", 1u32), ("CanIncludeInClipboardHistory", 0)] {
+        for (name, value) in
+            [("ExcludeClipboardContentFromMonitorProcessing", 1u32), ("CanIncludeInClipboardHistory", 0)]
+        {
             {
                 let _open = OpenGuard::open(cb.hwnd()).unwrap();
                 unsafe { EmptyClipboard() }.unwrap();
@@ -502,7 +546,9 @@ mod tests {
                 set(marker, &value.to_le_bytes()).unwrap();
             }
             assert!(matches!(cb.read(&opts).unwrap(), LocalRead::Sensitive { .. }), "{name}");
-            let LocalRead::Clip { clip, .. } = cb.read(&ReadOptions { skip_sensitive: false, ..opts }).unwrap() else { panic!() };
+            let LocalRead::Clip { clip, .. } = cb.read(&ReadOptions { skip_sensitive: false, ..opts }).unwrap() else {
+                panic!()
+            };
             assert_eq!(clip.text.as_deref(), Some("s"), "read when the user allows it");
         }
         cb.write(Arc::new(Clip::text(""))).unwrap();

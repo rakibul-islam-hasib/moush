@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use moush_engine::core::features::{ClipboardSettings, KeyboardSettings, NotificationSettings, TransferSettings};
-use moush_engine::core::protocol::DEFAULT_PORT;
 use moush_engine::core::keys::ShortcutSet;
+use moush_engine::core::protocol::DEFAULT_PORT;
 use moush_engine::core::router::{EdgeModifier, RouterSettings};
 use moush_engine::core::util::write_atomic;
 
@@ -273,7 +273,12 @@ mod tests {
 
     #[test]
     fn validation() {
-        let s = Settings { device_name: "  Desk\n PC ".into(), switch_delay_ms: 5000, client_pointer_speed: 9.0, ..Default::default() };
+        let s = Settings {
+            device_name: "  Desk\n PC ".into(),
+            switch_delay_ms: 5000,
+            client_pointer_speed: 9.0,
+            ..Default::default()
+        };
         let v = s.validated().unwrap();
         assert_eq!(v.device_name, "Desk PC");
         assert_eq!(v.switch_delay_ms, 1000);

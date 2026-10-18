@@ -144,7 +144,11 @@ pub struct DevicePolicyArg {
 #[tauri::command]
 pub async fn set_device_policy(app: State<'_, Arc<App>>, device_id: String, policy: DevicePolicyArg) -> Res<()> {
     let app = app.inner().clone();
-    let p = moush_engine::core::features::DevicePolicy { clipboard: policy.clipboard, files: policy.files, text_share: policy.text_share };
+    let p = moush_engine::core::features::DevicePolicy {
+        clipboard: policy.clipboard,
+        files: policy.files,
+        text_share: policy.text_share,
+    };
     blocking(move || app.set_device_policy(&device_id, p)).await
 }
 

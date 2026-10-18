@@ -2,8 +2,8 @@
 
 pub mod capture;
 pub mod clipboard;
-pub mod display_watch;
 pub mod dialogs;
+pub mod display_watch;
 pub mod dpi;
 pub mod focus;
 pub mod inject;

@@ -34,16 +34,30 @@
 //! harmless "mask" key ([`keys::VK_MASK`]) before the release, so nothing pops up there.
 
 use crate::geometry::{Edge, Layout, Point, Step, Target};
-use crate::keys::{self, mods, ShortcutSet};
-use crate::protocol::{key_flags, Message, MouseButton, WheelAxis};
+use crate::keys::{self, ShortcutSet, mods};
+use crate::protocol::{Message, MouseButton, WheelAxis, key_flags};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RawInput {
     /// Position the OS is about to move the cursor to (already clamped to the desktop).
-    MouseMove { x: i32, y: i32 },
-    MouseButton { button: MouseButton, down: bool },
-    Wheel { axis: WheelAxis, delta: i16 },
-    Key { vk: u16, scan: u16, extended: bool, down: bool },
+    MouseMove {
+        x: i32,
+        y: i32,
+    },
+    MouseButton {
+        button: MouseButton,
+        down: bool,
+    },
+    Wheel {
+        axis: WheelAxis,
+        delta: i16,
+    },
+    Key {
+        vk: u16,
+        scan: u16,
+        extended: bool,
+        down: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,7 +70,10 @@ pub enum Verdict {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    Send { client: String, msg: Message },
+    Send {
+        client: String,
+        msg: Message,
+    },
     /// Move the host cursor (SetCursorPos).
     WarpCursor(Point),
     /// Hide the host cursor at the park position while a client is active.
@@ -69,7 +86,12 @@ pub enum Action {
     /// Inject a key event on the host (by virtual-key code, tagged so that our own hooks
     /// ignore it). Used to hand a shortcut over to the host, to re-press modifiers still
     /// held when the cursor comes home, and to mask Win/Alt releases.
-    LocalKey { vk: u16, scan: u16, extended: bool, down: bool },
+    LocalKey {
+        vk: u16,
+        scan: u16,
+        extended: bool,
+        down: bool,
+    },
 }
 
 /// Modifier that must be held for the cursor to cross a screen edge.
@@ -675,7 +697,8 @@ impl Router {
     fn on_press(&mut self, vk: u16, info: KeyInfo, now_ms: u64, out: &mut Vec<Action>) -> Verdict {
         let bit = keys::modifier_bit(vk);
         let held = self.held_mods();
-        let mut entry = Held { route: Route::Local, info, mirrored: false, repeat: true, masked: false, seen_ms: now_ms };
+        let mut entry =
+            Held { route: Route::Local, info, mirrored: false, repeat: true, masked: false, seen_ms: now_ms };
 
         // Moush's own hotkeys work on the physical key state and never reach any computer.
         if bit == 0 && self.hotkey(vk, held, out) {
@@ -774,7 +797,8 @@ impl Router {
             out.push(Action::LockChanged(self.locked));
             return true;
         }
-        if vk == keys::VK_ESCAPE && held & (mods::CTRL | mods::ALT) == mods::CTRL | mods::ALT && self.active().is_some() {
+        if vk == keys::VK_ESCAPE && held & (mods::CTRL | mods::ALT) == mods::CTRL | mods::ALT && self.active().is_some()
+        {
             self.force_local(out);
             return true;
         }

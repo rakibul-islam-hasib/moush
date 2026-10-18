@@ -43,7 +43,12 @@ pub fn on_event(app: &App, e: Event) {
         Event::Changed => app.notify(),
         Event::Incoming { peer_name, files, bytes, needs_approval: true, .. } => {
             let what = if files == 1 { "a file".to_string() } else { format!("{files} files") };
-            notify::send(app, Kind::Transfer, &format!("{peer_name} wants to send you {what}"), &format!("{}. Open Moush to accept or decline.", size(bytes)));
+            notify::send(
+                app,
+                Kind::Transfer,
+                &format!("{peer_name} wants to send you {what}"),
+                &format!("{}. Open Moush to accept or decline.", size(bytes)),
+            );
         }
         Event::Incoming { .. } => {}
         Event::Finished(t) => finished(app, &t),

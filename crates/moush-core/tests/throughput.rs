@@ -10,8 +10,8 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::thread;
 use std::time::Instant;
 
-use moush_core::crypto::{handshake, Identity, MAX_FRAME_PLAINTEXT};
-use moush_core::protocol::{decode_all, encode, Message, MAX_FEATURE_BODY};
+use moush_core::crypto::{Identity, MAX_FRAME_PLAINTEXT, handshake};
+use moush_core::protocol::{MAX_FEATURE_BODY, Message, decode_all, encode};
 
 #[test]
 #[ignore = "benchmark; run explicitly with --ignored"]

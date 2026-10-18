@@ -26,9 +26,11 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use moush_core::features::{cap, channel, TransferSettings};
+use moush_core::features::{TransferSettings, cap, channel};
 use moush_core::flow::{Acquire, Window};
-use moush_core::transfer::{self as tr, AcceptAssembler, FileEntry, Msg, OfferAssembler, RateMeter, ReceiveFile, Resume, Start, WriteAt};
+use moush_core::transfer::{
+    self as tr, AcceptAssembler, FileEntry, Msg, OfferAssembler, RateMeter, ReceiveFile, Resume, Start, WriteAt,
+};
 use moush_core::util::{mono_ms, now_ms};
 
 use crate::features::{FeatureHub, FeatureService};
@@ -278,7 +280,11 @@ impl TransferService {
     }
 
     /// Where settings are read from (at the moment they are needed) and where events go.
-    pub fn set_handlers(&self, settings: impl Fn() -> TransferSettings + Send + Sync + 'static, events: impl Fn(Event) + Send + Sync + 'static) {
+    pub fn set_handlers(
+        &self,
+        settings: impl Fn() -> TransferSettings + Send + Sync + 'static,
+        events: impl Fn(Event) + Send + Sync + 'static,
+    ) {
         *self.inner.settings.write().unwrap() = Box::new(settings);
         *self.inner.events.write().unwrap() = Box::new(events);
     }
@@ -308,7 +314,11 @@ impl TransferService {
                 break id;
             }
         };
-        log::info!("transfer s{id:016x}: sending {} file(s), {} bytes", files.len(), files.iter().map(|f| f.size).sum::<u64>());
+        log::info!(
+            "transfer s{id:016x}: sending {} file(s), {} bytes",
+            files.len(),
+            files.iter().map(|f| f.size).sum::<u64>()
+        );
         let t = Arc::new(Transfer {
             id,
             ui_id: format!("s{id:016x}"),
@@ -351,7 +361,11 @@ impl TransferService {
         }
         if accept {
             if !self.inner.receive_allowed(&t.peer_id) {
-                self.inner.reject(&t, "File transfer is turned off on the receiving computer.", Some("File transfer is turned off.".into()));
+                self.inner.reject(
+                    &t,
+                    "File transfer is turned off on the receiving computer.",
+                    Some("File transfer is turned off.".into()),
+                );
                 return Err("File transfer is turned off for this device.".into());
             }
             self.inner.start_receiver(&t);
@@ -615,7 +629,8 @@ impl Inner {
     fn tell(&self, peer: &str, msg: Msg) -> bool {
         let Some(sender) = self.hub().and_then(|h| h.sender(peer)) else { return false };
         let body = msg.encode();
-        sender.try_send_feature(channel::FILES, body.clone()) || sender.send_feature(channel::FILES, body, Duration::from_secs(2))
+        sender.try_send_feature(channel::FILES, body.clone())
+            || sender.send_feature(channel::FILES, body, Duration::from_secs(2))
     }
 
     fn route(&self, t: &Arc<Transfer>, msg: Msg) {
@@ -777,7 +792,10 @@ fn on_offer(inner: &Arc<Inner>, peer: &str, msg: Msg) {
             }
             if !inner.receive_allowed(peer) {
                 drop(asm);
-                inner.tell(peer, Msg::Reject { id, reason: "File transfer is turned off on the receiving computer.".into() });
+                inner.tell(
+                    peer,
+                    Msg::Reject { id, reason: "File transfer is turned off on the receiving computer.".into() },
+                );
                 return;
             }
             let open = inner.with_peer(peer).iter().filter(|t| !t.outgoing).count()
@@ -878,7 +896,8 @@ fn offer_complete(inner: &Arc<Inner>, peer: &str, id: u64, files: Vec<FileEntry>
         inner.tell(peer, Msg::Reject { id, reason: "Duplicate transfer id.".into() });
         return;
     }
-    let files: Vec<FileEntry> = names.into_iter().zip(&files).map(|(name, f)| FileEntry { name, size: f.size }).collect();
+    let files: Vec<FileEntry> =
+        names.into_iter().zip(&files).map(|(name, f)| FileEntry { name, size: f.size }).collect();
     let count = files.len();
     let t = new_incoming(peer, &summary.name, id, files);
     let total = t.st.lock().unwrap().total;
@@ -889,7 +908,13 @@ fn offer_complete(inner: &Arc<Inner>, peer: &str, id: u64, files: Vec<FileEntry>
     log::info!("transfer {}: {} offers {count} file(s), {total} bytes", t.ui_id, summary.name);
     inner.remove_final(peer, id);
     inner.insert(t.clone());
-    inner.emit(Event::Incoming { id: t.ui_id.clone(), peer_name: summary.name.clone(), files: count, bytes: total, needs_approval: ask });
+    inner.emit(Event::Incoming {
+        id: t.ui_id.clone(),
+        peer_name: summary.name.clone(),
+        files: count,
+        bytes: total,
+        needs_approval: ask,
+    });
     if ask {
         inner.changed();
     } else {
@@ -971,7 +996,8 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
         let s = t.st.lock().unwrap();
         (s.files.clone(), s.sources.clone())
     };
-    let send = |body: Vec<u8>| if sender.send_feature(channel::FILES, body, SEND_TIMEOUT) { Ok(()) } else { Err(lost()) };
+    let send =
+        |body: Vec<u8>| if sender.send_feature(channel::FILES, body, SEND_TIMEOUT) { Ok(()) } else { Err(lost()) };
 
     for part in tr::offer_parts(t.id, &files) {
         send(part)?;
@@ -1015,7 +1041,8 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
         let mut hasher = tr::HashState::default();
         let mut pos = 0;
         if offset > 0 {
-            let own = tr::hash_prefix(&mut file, offset, || a.stop().is_some()).map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.name)))?;
+            let own = tr::hash_prefix(&mut file, offset, || a.stop().is_some())
+                .map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.name)))?;
             pos = tr::resume_from(offset, &prefix, &tr::finish_hash(&own));
             if pos > 0 {
                 hasher = own;
@@ -1090,7 +1117,13 @@ fn receive_worker(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Arc<Attempt>, rx: R
     }
 }
 
-fn receive(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>, rx_files: &mut Vec<RxFile>) -> Result<(), Abort> {
+fn receive(
+    inner: &Arc<Inner>,
+    t: &Arc<Transfer>,
+    a: &Attempt,
+    rx: &Receiver<Input>,
+    rx_files: &mut Vec<RxFile>,
+) -> Result<(), Abort> {
     let settings = inner.settings();
     let dir = resolve_download_dir(&settings.download_dir, &inner.default_dir).map_err(Abort::Refuse)?;
     t.st.lock().unwrap().destination = Some(dir.clone());
@@ -1115,7 +1148,8 @@ fn receive(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Inp
             let offset = tr::receive_offset(len, f.size);
             if offset > 0 {
                 // Errors while stopped are ignored by `end_worker`.
-                let unreadable = |e: io::Error| Abort::Refuse(format!("Cannot read the partial copy of {}: {e}", f.name));
+                let unreadable =
+                    |e: io::Error| Abort::Refuse(format!("Cannot read the partial copy of {}: {e}", f.name));
                 let mut file = File::open(&part).map_err(unreadable)?;
                 let hasher = tr::hash_prefix(&mut file, offset, cancelled).map_err(unreadable)?;
                 resume.push(Resume { index: i as u32, offset, prefix: tr::finish_hash(&hasher) });
@@ -1175,7 +1209,9 @@ fn receive(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Inp
                 t.done.fetch_add(data.len() as u64, Ordering::Relaxed);
                 // Acknowledge after the write: a slow disk slows the sender down.
                 let ack = Msg::Ack { id: t.id, bytes: data.len() as u32 }.encode();
-                if !sender.try_send_feature(channel::FILES, ack.clone()) && !sender.send_feature(channel::FILES, ack, SEND_TIMEOUT) {
+                if !sender.try_send_feature(channel::FILES, ack.clone())
+                    && !sender.send_feature(channel::FILES, ack, SEND_TIMEOUT)
+                {
                     return Err(lost());
                 }
                 inner.progress();
@@ -1248,7 +1284,8 @@ fn place_file(part: &Path, dir: &Path, name: &str, policy: tr::Overwrite) -> io:
             return Ok(None);
         };
         let dest = dir.join(dest_name);
-        let moved = if policy == tr::Overwrite::Replace { fs::rename(part, &dest) } else { move_no_replace(part, &dest) };
+        let moved =
+            if policy == tr::Overwrite::Replace { fs::rename(part, &dest) } else { move_no_replace(part, &dest) };
         match moved {
             Ok(()) => {
                 mark_downloaded(&dest);
@@ -1281,7 +1318,12 @@ fn remove_stale_parts(dir: &Path) {
         if !name.to_string_lossy().ends_with(tr::PART_SUFFIX) {
             continue;
         }
-        let old = e.metadata().ok().and_then(|m| m.modified().ok()).and_then(|t| t.elapsed().ok()).is_some_and(|age| age > STALE_PART_AGE);
+        let old = e
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > STALE_PART_AGE);
         if old {
             let _ = fs::remove_file(e.path());
         }
@@ -1301,7 +1343,10 @@ fn stat_sources(paths: &[PathBuf]) -> Result<(Vec<FileEntry>, Vec<PathBuf>), Str
     let mut files = Vec::with_capacity(paths.len());
     let mut total = 0u64;
     for p in paths {
-        let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or_else(|| format!("{} is not a file.", p.display()))?;
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .ok_or_else(|| format!("{} is not a file.", p.display()))?;
         let meta = fs::metadata(p).map_err(|e| format!("Cannot read {name}: {e}"))?;
         if meta.is_dir() {
             return Err(format!("{name} is a folder; only files can be sent."));
@@ -1361,13 +1406,17 @@ pub fn resolve_download_dir(setting: &str, default: &Path) -> Result<PathBuf, St
         _ => false,
     };
     if !local || !dir.is_absolute() {
-        return Err(format!("The download folder \"{}\" must be a full path on a drive of this computer.", dir.display()));
+        return Err(format!(
+            "The download folder \"{}\" must be a full path on a drive of this computer.",
+            dir.display()
+        ));
     }
     if is_network_drive(&dir) {
         return Err(format!("The download folder \"{}\" is on a network drive.", dir.display()));
     }
     fs::create_dir_all(&dir).map_err(|e| format!("Cannot create the download folder \"{}\": {e}", dir.display()))?;
-    let canonical = fs::canonicalize(&dir).map_err(|e| format!("Cannot open the download folder \"{}\": {e}", dir.display()))?;
+    let canonical =
+        fs::canonicalize(&dir).map_err(|e| format!("Cannot open the download folder \"{}\": {e}", dir.display()))?;
     if !canonical.is_dir() {
         return Err(format!("\"{}\" is not a folder.", dir.display()));
     }
@@ -1377,7 +1426,7 @@ pub fn resolve_download_dir(setting: &str, default: &Path) -> Result<PathBuf, St
 /// `Downloads\Moush` in the user's Downloads folder (wherever it was moved to).
 pub fn default_download_dir() -> PathBuf {
     use windows::Win32::System::Com::CoTaskMemFree;
-    use windows::Win32::UI::Shell::{FOLDERID_Downloads, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    use windows::Win32::UI::Shell::{FOLDERID_Downloads, KF_FLAG_DEFAULT, SHGetKnownFolderPath};
     let known = unsafe {
         SHGetKnownFolderPath(&FOLDERID_Downloads, KF_FLAG_DEFAULT, None).ok().and_then(|p| {
             let s = p.to_string().ok();
@@ -1392,8 +1441,8 @@ pub fn default_download_dir() -> PathBuf {
 }
 
 fn is_network_drive(dir: &Path) -> bool {
-    use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::GetDriveTypeW;
+    use windows::core::PCWSTR;
     const DRIVE_REMOTE: u32 = 4;
     let Some(Component::Prefix(p)) = dir.components().next() else { return false };
     let root = match p.kind() {
@@ -1405,8 +1454,8 @@ fn is_network_drive(dir: &Path) -> bool {
 }
 
 fn free_space(dir: &Path) -> Option<u64> {
-    use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    use windows::core::PCWSTR;
     let w = wide(dir);
     let mut free = 0u64;
     unsafe { GetDiskFreeSpaceExW(PCWSTR(w.as_ptr()), Some(&mut free), None, None) }.ok().map(|_| free)
@@ -1414,9 +1463,9 @@ fn free_space(dir: &Path) -> Option<u64> {
 
 /// Renames `from` to `to`, failing with `AlreadyExists` instead of replacing a file.
 fn move_no_replace(from: &Path, to: &Path) -> io::Result<()> {
-    use windows::core::PCWSTR;
     use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS};
-    use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
+    use windows::Win32::Storage::FileSystem::{MOVEFILE_WRITE_THROUGH, MoveFileExW};
+    use windows::core::PCWSTR;
     let (f, t) = (wide(from), wide(to));
     match unsafe { MoveFileExW(PCWSTR(f.as_ptr()), PCWSTR(t.as_ptr()), MOVEFILE_WRITE_THROUGH) } {
         Ok(()) => Ok(()),
@@ -1468,7 +1517,10 @@ mod tests {
         assert!(!dir.join(tr::part_name("a.txt", 1)).exists(), "skipped part is removed");
         place_file(&part(b"new2"), &dir, "a.txt", tr::Overwrite::Replace).unwrap().unwrap();
         assert_eq!(fs::read(dir.join("a.txt")).unwrap(), b"new2");
-        assert_eq!(move_no_replace(&dir.join("a (1).txt"), &dir.join("a.txt")).unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            move_no_replace(&dir.join("a (1).txt"), &dir.join("a.txt")).unwrap_err().kind(),
+            io::ErrorKind::AlreadyExists
+        );
         assert!(free_space(&dir).unwrap() > 0);
         fs::remove_dir_all(&dir).unwrap();
     }

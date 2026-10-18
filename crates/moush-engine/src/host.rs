@@ -150,7 +150,15 @@ impl HostEngine {
         let (layout, views) = layout::build(&host_monitors, &[], &store);
 
         let capture = Capture::start(layout, opts.router, stats.clone(), events.clone())?;
-        let server = match HostServer::start(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opts.port), opts.name.clone(), identity.clone(), trust, broker, stats, events) {
+        let server = match HostServer::start(
+            SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opts.port),
+            opts.name.clone(),
+            identity.clone(),
+            trust,
+            broker,
+            stats,
+            events,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 capture.stop();
@@ -159,7 +167,8 @@ impl HostEngine {
         };
         let mut warning = None;
         let responder = if opts.discovery {
-            match Responder::start(Announce { id: identity.device_id(), name: opts.name.clone(), port: server.port() }) {
+            match Responder::start(Announce { id: identity.device_id(), name: opts.name.clone(), port: server.port() })
+            {
                 Ok(r) => Some(r),
                 Err(e) => {
                     log::warn!("LAN discovery unavailable: {e}");

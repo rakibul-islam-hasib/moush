@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use crate::keys;
-use crate::protocol::{key_flags, Message, MouseButton, WheelAxis};
+use crate::protocol::{Message, MouseButton, WheelAxis, key_flags};
 
 /// OS-level injection primitives. Each returns false if the OS rejected the input
 /// (e.g. UIPI blocked injection into an elevated window).
@@ -208,7 +208,11 @@ pub(crate) mod tests {
         s.apply(&Message::Leave);
         assert_eq!(
             *rec.0.lock().unwrap(),
-            vec![Ev::Key(keys::VK_MASK, true, true), Ev::Key(keys::VK_MASK, false, true), Ev::Key(keys::VK_LWIN, false, false)]
+            vec![
+                Ev::Key(keys::VK_MASK, true, true),
+                Ev::Key(keys::VK_MASK, false, true),
+                Ev::Key(keys::VK_LWIN, false, false)
+            ]
         );
         // A forwarded mask key (host-side shortcut hand-over) is injected by virtual key.
         s.apply(&Message::Enter { x: 0, y: 0 });

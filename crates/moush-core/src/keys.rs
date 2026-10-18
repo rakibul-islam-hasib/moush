@@ -60,7 +60,17 @@ pub mod mods {
 /// Every modifier key code. Low-level hooks report the left/right codes; the generic
 /// ones are listed for completeness.
 pub const MODIFIER_VKS: [u16; 11] = [
-    VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN, VK_SHIFT, VK_CONTROL, VK_MENU,
+    VK_LSHIFT,
+    VK_RSHIFT,
+    VK_LCONTROL,
+    VK_RCONTROL,
+    VK_LMENU,
+    VK_RMENU,
+    VK_LWIN,
+    VK_RWIN,
+    VK_SHIFT,
+    VK_CONTROL,
+    VK_MENU,
 ];
 
 pub fn is_modifier(vk: u16) -> bool {
@@ -145,7 +155,8 @@ fn key_from_name(s: &str) -> Option<u16> {
         let c = b[0].to_ascii_uppercase();
         return (c.is_ascii_uppercase() || c.is_ascii_digit()).then_some(c as u16);
     }
-    if let Some(n) = s.strip_prefix(['F', 'f']).filter(|n| n.bytes().all(|c| c.is_ascii_digit())).and_then(|n| n.parse::<u16>().ok())
+    if let Some(n) =
+        s.strip_prefix(['F', 'f']).filter(|n| n.bytes().all(|c| c.is_ascii_digit())).and_then(|n| n.parse::<u16>().ok())
         && (1..=24).contains(&n)
     {
         return Some(VK_F1 + n - 1);
@@ -314,8 +325,20 @@ mod tests {
     #[test]
     fn rejects_invalid_shortcuts() {
         for bad in [
-            "", "+", "Ctrl+", "Ctrl++A", "A", "Esc", "Hyper+A", "Ctrl+Ctrl+A", "Ctrl+F25", "Ctrl+F0", "Ctrl+Shift",
-            "Ctrl+AB", "Ctrl+Alt+Delete", "Ctrl+é",
+            "",
+            "+",
+            "Ctrl+",
+            "Ctrl++A",
+            "A",
+            "Esc",
+            "Hyper+A",
+            "Ctrl+Ctrl+A",
+            "Ctrl+F25",
+            "Ctrl+F0",
+            "Ctrl+Shift",
+            "Ctrl+AB",
+            "Ctrl+Alt+Delete",
+            "Ctrl+é",
         ] {
             assert!(parse_shortcut(bad).is_err(), "{bad:?} should be rejected");
         }
@@ -323,7 +346,8 @@ mod tests {
 
     #[test]
     fn shortcut_set_is_bounded_and_deduplicated() {
-        let entries: Vec<String> = (0..20).map(|i| format!("Ctrl+F{}", i + 1)).chain(["ctrl+f1".into(), "bogus".into()]).collect();
+        let entries: Vec<String> =
+            (0..20).map(|i| format!("Ctrl+F{}", i + 1)).chain(["ctrl+f1".into(), "bogus".into()]).collect();
         let (set, errors) = ShortcutSet::parse(&entries);
         assert_eq!(set.as_slice().len(), ShortcutSet::CAPACITY);
         assert_eq!(errors.len(), 5, "{errors:?}"); // F17..F20 over capacity + "bogus"

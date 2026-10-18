@@ -12,11 +12,11 @@ use std::time::{Duration, Instant};
 
 use moush_core::crypto::Identity;
 use moush_core::inject::{InjectState, Injector};
-use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
+use moush_core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
 use moush_core::net::host::{ClientHandle, HostEvents, HostServer};
-use moush_core::net::{try_send, Outgoing, PeerInfo, PeerSender, MAX_BULK_QUEUED};
+use moush_core::net::{MAX_BULK_QUEUED, Outgoing, PeerInfo, PeerSender, try_send};
 use moush_core::pairing::PairingBroker;
-use moush_core::protocol::{key_flags, Message, MonitorDesc, MouseButton, WheelAxis, MAX_FEATURE_BODY};
+use moush_core::protocol::{MAX_FEATURE_BODY, Message, MonitorDesc, MouseButton, WheelAxis, key_flags};
 use moush_core::stats::Stats;
 use moush_core::trust::{TrustRole, TrustStore};
 
@@ -169,7 +169,15 @@ fn client(h: &Host, pretrusted: bool, events: Arc<dyn ClientEvents + Send + Sync
                     trust: &trust,
                     broker: &broker,
                     stats: &stats,
-                    screens: vec![MonitorDesc { x: 0, y: 0, width: 1920, height: 1080, dpi: 96, primary: true, name: "D".into() }],
+                    screens: vec![MonitorDesc {
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
+                        dpi: 96,
+                        primary: true,
+                        name: "D".into(),
+                    }],
                     stop: &stop,
                 },
                 &mut inject,
@@ -233,12 +241,16 @@ fn input_at_1khz(c: &ClientHandle, n: u32) -> (u32, Duration, Option<Duration>) 
 #[test]
 fn bulk_contention_never_refuses_input() {
     let h = host(never_answering_broker());
-    let c = client(&h, true, Arc::new(Stalling {
-        sender: Mutex::new(None),
-        stall: Duration::ZERO,
-        stalled: AtomicBool::new(true),
-        features: AtomicU64::new(0),
-    }));
+    let c = client(
+        &h,
+        true,
+        Arc::new(Stalling {
+            sender: Mutex::new(None),
+            stall: Duration::ZERO,
+            stalled: AtomicBool::new(true),
+            features: AtomicU64::new(0),
+        }),
+    );
     let ch = h.connected.recv_timeout(Duration::from_secs(10)).unwrap();
     assert!(try_send(&ch.outbox, Outgoing::now(Message::Enter { x: 0, y: 0 })));
 
@@ -248,7 +260,8 @@ fn bulk_contention_never_refuses_input() {
     let flood = bulk_flood(&ch.sender, 8, &stop);
     let (refused, slowest, _) = input_at_1khz(&ch, 2000);
     stop.store(true, Ordering::SeqCst);
-    let (sent, waited): (u64, u64) = flood.into_iter().map(|t| t.join().unwrap()).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+    let (sent, waited): (u64, u64) =
+        flood.into_iter().map(|t| t.join().unwrap()).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
     for _ in 0..2000 {
         c.keys.recv_timeout(Duration::from_secs(10)).expect("every key arrives");
     }
@@ -287,7 +300,10 @@ fn stalled_receiver_resumes_without_losing_input() {
     for i in 0..2500 {
         c.keys.recv_timeout(Duration::from_secs(10)).unwrap_or_else(|_| panic!("key {i} arrives after the stall"));
     }
-    println!("stall 1.2 s: refused {refused}, slowest try_send {slowest:?}, chunks received {}", ev.features.load(Ordering::Relaxed));
+    println!(
+        "stall 1.2 s: refused {refused}, slowest try_send {slowest:?}, chunks received {}",
+        ev.features.load(Ordering::Relaxed)
+    );
     assert!(ev.stalled.load(Ordering::SeqCst), "the stall happened");
     assert_eq!(refused, 0, "a short stall fits in the queue");
     assert!(slowest < Duration::from_millis(50), "try_send never blocks ({slowest:?})");
@@ -362,7 +378,12 @@ fn pairing_flood_cannot_lock_out_trusted_clients() {
     let h = host(never_answering_broker());
     // Two unpaired devices wait for a pairing decision nobody gives.
     let quiet = || -> Arc<dyn ClientEvents + Send + Sync> {
-        Arc::new(Stalling { sender: Mutex::new(None), stall: Duration::ZERO, stalled: AtomicBool::new(true), features: AtomicU64::new(0) })
+        Arc::new(Stalling {
+            sender: Mutex::new(None),
+            stall: Duration::ZERO,
+            stalled: AtomicBool::new(true),
+            features: AtomicU64::new(0),
+        })
     };
     let a = client(&h, false, quiet());
     let b = client(&h, false, quiet());

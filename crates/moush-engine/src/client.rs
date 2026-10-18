@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use moush_core::crypto::Identity;
 use moush_core::discovery;
 use moush_core::inject::{InjectState, Injector};
-use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
+use moush_core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
 use moush_core::net::{PeerInfo, PeerSender};
 use moush_core::pairing::PairingBroker;
 use moush_core::protocol::{MonitorDesc, MouseButton, WheelAxis};
@@ -115,7 +115,10 @@ impl ClientEvents for Shared {
     }
 
     fn active_changed(&self, active: bool) {
-        log::info!("{}", if active { "shared cursor entered this computer" } else { "shared cursor left this computer" });
+        log::info!(
+            "{}",
+            if active { "shared cursor entered this computer" } else { "shared cursor left this computer" }
+        );
         if active
             && self.focus_on_enter.load(Ordering::Relaxed)
             && let Some(f) = &self.focus
@@ -225,7 +228,18 @@ impl ClientEngine {
             }
         };
 
-        let ctx = Worker { target, opts, identity, trust, broker, stats, shared: shared.clone(), link: link.clone(), stop: stop.clone(), wake: wake_rx };
+        let ctx = Worker {
+            target,
+            opts,
+            identity,
+            trust,
+            broker,
+            stats,
+            shared: shared.clone(),
+            link: link.clone(),
+            stop: stop.clone(),
+            wake: wake_rx,
+        };
         let thread = thread::Builder::new().name("client".into()).spawn(move || ctx.run())?;
         Ok(Self { shared, link, stop, wake: wake_tx, thread: Some(thread), _watcher: watcher })
     }
@@ -298,7 +312,11 @@ impl Injector for DryRunInjector {
         true
     }
     fn key(&mut self, vk: u16, scan: u16, ext: bool, down: bool, _by_vk: bool) -> bool {
-        log::debug!("[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}", if ext { " ext" } else { "" }, if down { "down" } else { "up" });
+        log::debug!(
+            "[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}",
+            if ext { " ext" } else { "" },
+            if down { "down" } else { "up" }
+        );
         true
     }
 }
@@ -351,7 +369,11 @@ struct Worker {
 impl Worker {
     fn run(self) {
         make_thread_dpi_aware();
-        let injector = if self.opts.dry_run { AnyInjector::Dry(DryRunInjector) } else { AnyInjector::Real(SendInputInjector::new()) };
+        let injector = if self.opts.dry_run {
+            AnyInjector::Dry(DryRunInjector)
+        } else {
+            AnyInjector::Real(SendInputInjector::new())
+        };
         let mut inject = InjectState::new(injector);
         // Once connected, we know who the host is: later attempts must reach the same device.
         let mut known_host = match &self.target {
@@ -475,11 +497,7 @@ impl Worker {
 }
 
 fn discover(id: &str) -> Option<SocketAddr> {
-    discovery::scan(Duration::from_millis(700))
-        .ok()?
-        .into_iter()
-        .find(|f| f.announce.id == id)
-        .map(|f| f.addr)
+    discovery::scan(Duration::from_millis(700)).ok()?.into_iter().find(|f| f.announce.id == id).map(|f| f.addr)
 }
 
 /// Parses "host", "host:port", "1.2.3.4", "[::1]:24800". Prefers IPv4.
@@ -497,7 +515,8 @@ pub fn parse_address(s: &str, default_port: u16) -> Result<SocketAddr, String> {
     } else {
         format!("{s}:{default_port}")
     };
-    let addrs: Vec<SocketAddr> = with_port.to_socket_addrs().map_err(|e| format!("cannot resolve \"{s}\": {e}"))?.collect();
+    let addrs: Vec<SocketAddr> =
+        with_port.to_socket_addrs().map_err(|e| format!("cannot resolve \"{s}\": {e}"))?.collect();
     addrs
         .iter()
         .find(|a| a.is_ipv4())

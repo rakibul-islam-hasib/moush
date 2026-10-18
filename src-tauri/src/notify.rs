@@ -110,10 +110,20 @@ impl ConnectionWatch {
             }
         }
         self.known = peers.into_iter().collect();
-        let due: Vec<String> = self.gone.iter().filter(|(_, (_, at))| now.duration_since(*at) >= GRACE).map(|(id, _)| id.clone()).collect();
+        let due: Vec<String> = self
+            .gone
+            .iter()
+            .filter(|(_, (_, at))| now.duration_since(*at) >= GRACE)
+            .map(|(id, _)| id.clone())
+            .collect();
         for id in due {
             if let Some((name, _)) = self.gone.remove(&id) {
-                send(app, Kind::Connection, &format!("{name} disconnected"), "Moush reconnects automatically when it is back.");
+                send(
+                    app,
+                    Kind::Connection,
+                    &format!("{name} disconnected"),
+                    "Moush reconnects automatically when it is back.",
+                );
             }
         }
     }

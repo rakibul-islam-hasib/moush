@@ -7,17 +7,17 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use windows::core::{Result as WinResult, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{ERROR_CANCELLED, HWND};
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
-    COINIT_DISABLE_OLE1DDE,
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoCreateInstance, CoInitializeEx,
+    CoTaskMemFree, CoUninitialize,
 };
 use windows::Win32::UI::Shell::{
-    FileOpenDialog, IFileOpenDialog, ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, ShellExecuteW, FOS_ALLOWMULTISELECT,
-    FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, FileOpenDialog,
+    IFileOpenDialog, ILCreateFromPathW, ILFree, SHOpenFolderAndSelectItems, SIGDN_FILESYSPATH, ShellExecuteW,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use windows::core::{HSTRING, PCWSTR, Result as WinResult};
 
 /// Runs `f` on a new STA thread and waits for it.
 fn on_sta<T: Send + 'static>(f: impl FnOnce() -> WinResult<T> + Send + 'static) -> Result<T, String> {

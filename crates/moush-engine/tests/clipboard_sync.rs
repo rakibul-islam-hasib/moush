@@ -12,17 +12,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use moush_engine::clipboard::{
-    ChangeCallback, ClipboardBackend, ClipboardConfig, ClipboardEvent, ClipboardService, LocalRead, ReadOptions, ServiceOptions,
+    ChangeCallback, ClipboardBackend, ClipboardConfig, ClipboardEvent, ClipboardService, LocalRead, ReadOptions,
+    ServiceOptions,
 };
 use moush_engine::core::clipboard::Clip;
 use moush_engine::core::crypto::Identity;
-use moush_engine::core::features::{cap, ClipboardSettings};
+use moush_engine::core::features::{ClipboardSettings, cap};
 use moush_engine::core::inject::{InjectState, Injector};
-use moush_engine::core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig};
+use moush_engine::core::net::client::{ClientEvents, ClientLink, SessionConfig, run_session};
 use moush_engine::core::net::host::{ClientHandle, HostEvents, HostServer};
 use moush_engine::core::net::{Outgoing, PeerInfo, PeerSender};
 use moush_engine::core::pairing::PairingBroker;
-use moush_engine::core::protocol::{key_flags, Message, MonitorDesc, MouseButton, WheelAxis};
+use moush_engine::core::protocol::{Message, MonitorDesc, MouseButton, WheelAxis, key_flags};
 use moush_engine::core::stats::{LatencyRing, Stats};
 use moush_engine::core::trust::TrustStore;
 use moush_engine::core::util::mono_us;
@@ -278,7 +279,15 @@ fn rig(n_clients: usize) -> Rig {
                 let broker = auto_broker();
                 let stats = Arc::new(Stats::new());
                 let mut inject = InjectState::new(Recorder(ktx));
-                let screens = vec![MonitorDesc { x: 0, y: 0, width: 1920, height: 1080, dpi: 96, primary: true, name: "M".into() }];
+                let screens = vec![MonitorDesc {
+                    x: 0,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                    dpi: 96,
+                    primary: true,
+                    name: "M".into(),
+                }];
                 run_session(
                     SessionConfig {
                         addr,
@@ -304,7 +313,8 @@ fn rig(n_clients: usize) -> Rig {
     // Both sides announce the clipboard feature before the tests start copying.
     wait("capabilities", || {
         rig.clients.iter().all(|c| {
-            rig.host.hub.effective_caps(&c.node.id) & cap::CLIPBOARD != 0 && c.node.hub.effective_caps(&rig.host.id) & cap::CLIPBOARD != 0
+            rig.host.hub.effective_caps(&c.node.id) & cap::CLIPBOARD != 0
+                && c.node.hub.effective_caps(&rig.host.id) & cap::CLIPBOARD != 0
         })
     });
     // Let the services start listening (first housekeeping tick).
@@ -362,7 +372,11 @@ fn large_and_unicode_clips_arrive_intact_while_input_flows() {
     let client = &rig.clients[0];
 
     // Client -> host: Unicode, multiline, CRLF and LF mixed.
-    let text = Clip { text: Some(UNICODE.into()), html: Some(b"Version:0.9\r\n<p>Gr\xc3\xbc\xc3\x9fe</p>".to_vec()), ..Default::default() };
+    let text = Clip {
+        text: Some(UNICODE.into()),
+        html: Some(b"Version:0.9\r\n<p>Gr\xc3\xbc\xc3\x9fe</p>".to_vec()),
+        ..Default::default()
+    };
     client.node.clipboard.copy(text.clone());
     wait("text on the host", || has(&rig.host, &text));
     assert!(matches!(rig.host.events.recv_timeout(Duration::from_secs(1)), Ok(ClipboardEvent::ClipReceived { .. })));
@@ -405,7 +419,10 @@ fn large_and_unicode_clips_arrive_intact_while_input_flows() {
 
     // History records both directions.
     let h = rig.host.svc.history();
-    assert_eq!(h.iter().map(|e| (e.kind.as_str(), e.origin)).collect::<Vec<_>>(), [("image", "sent"), ("rich", "received")]);
+    assert_eq!(
+        h.iter().map(|e| (e.kind.as_str(), e.origin)).collect::<Vec<_>>(),
+        [("image", "sent"), ("rich", "received")]
+    );
     assert_eq!(h[0].preview, format!("Image 1024 x {}", 5 * 1024 * 1024 / 4096));
     assert_eq!(client.node.svc.status().last_direction, Some("received"));
 
@@ -439,7 +456,10 @@ fn host_relays_between_clients_without_echo_and_concurrent_copies_converge() {
         rig.host.clipboard.copy(ch.clone());
         wait("convergence", || {
             let x = rig.host.clipboard.get();
-            x.is_some() && a.node.clipboard.get() == x && b.node.clipboard.get() == x && [&ca, &cb, &ch].iter().any(|c| x.as_ref() == Some(*c))
+            x.is_some()
+                && a.node.clipboard.get() == x
+                && b.node.clipboard.get() == x
+                && [&ca, &cb, &ch].iter().any(|c| x.as_ref() == Some(*c))
         });
     }
     // Quiet afterwards: no ping-pong.
@@ -467,7 +487,12 @@ fn limits_switches_and_text_sharing() {
 
     // Per-format toggles: rich text stripped by the receiver, plain text kept.
     client.node.settings.lock().unwrap().rich_text = false;
-    let rich = Clip { text: Some("bold".into()), html: Some(b"<b>bold</b>".to_vec()), rtf: Some(br"{\rtf1 \b bold}".to_vec()), ..Default::default() };
+    let rich = Clip {
+        text: Some("bold".into()),
+        html: Some(b"<b>bold</b>".to_vec()),
+        rtf: Some(br"{\rtf1 \b bold}".to_vec()),
+        ..Default::default()
+    };
     rig.host.clipboard.copy(rich);
     wait("plain part of a rich clip", || client.node.clipboard.get() == Some(Clip::text("bold")));
 

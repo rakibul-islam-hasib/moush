@@ -10,11 +10,11 @@ use std::thread;
 use std::time::Duration;
 
 use super::{
-    hello_and_authorize, handle_keepalive, run_writer, split_channel, try_send, AuthCtx, AuthError, BulkGate, ConnShared,
-    Outbox, Outgoing, PeerInfo, PeerSender, SetupDeadline, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, SETUP_DEADLINE,
-    WRITE_TIMEOUT,
+    AuthCtx, AuthError, BulkGate, ConnShared, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, Outbox, Outgoing, PeerInfo,
+    PeerSender, SETUP_DEADLINE, SetupDeadline, WRITE_TIMEOUT, handle_keepalive, hello_and_authorize, run_writer,
+    split_channel, try_send,
 };
-use crate::crypto::{handshake, Identity};
+use crate::crypto::{Identity, handshake};
 use crate::inject::{InjectState, Injector};
 use crate::pairing::PairingBroker;
 use crate::protocol::{Message, MonitorDesc, PeerRole};
@@ -232,13 +232,17 @@ pub fn run_session<I: Injector>(
     end
 }
 
-fn setup(stream: &mut TcpStream, cfg: &SessionConfig<'_>) -> Result<(PeerInfo, super::MsgReader, super::MsgWriter), SessionEnd> {
+fn setup(
+    stream: &mut TcpStream,
+    cfg: &SessionConfig<'_>,
+) -> Result<(PeerInfo, super::MsgReader, super::MsgWriter), SessionEnd> {
     let lost = |e: io::Error| SessionEnd::Lost(e.to_string());
     stream.set_nodelay(true).map_err(lost)?;
     stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
     stream.set_write_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
     let deadline = SetupDeadline::arm(stream, SETUP_DEADLINE).map_err(lost)?;
-    let ch = handshake(stream, cfg.identity, true).map_err(|e| SessionEnd::Lost(format!("secure handshake failed: {e}")))?;
+    let ch =
+        handshake(stream, cfg.identity, true).map_err(|e| SessionEnd::Lost(format!("secure handshake failed: {e}")))?;
     let remote = *ch.remote_static();
     let remote_id = crate::crypto::device_id(&remote);
     if let Some(expected) = &cfg.expected_host

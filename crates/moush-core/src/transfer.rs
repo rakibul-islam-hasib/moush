@@ -29,7 +29,7 @@ use std::io::{self, Read};
 
 use blake2::{Blake2s256, Digest};
 
-use crate::protocol::{wire, DecodeError, Reader, MAX_FEATURE_BODY};
+use crate::protocol::{DecodeError, MAX_FEATURE_BODY, Reader, wire};
 
 pub type Hash = [u8; 32];
 /// Running BLAKE2s-256 state of a file being sent or received.
@@ -286,7 +286,11 @@ pub fn accept_parts(id: u64, resume: &[Resume]) -> Vec<Vec<u8>> {
     let per = (MAX_FEATURE_BODY - ACCEPT_HEADER) / RESUME_LEN;
     let chunks: Vec<&[Resume]> = if resume.is_empty() { vec![&[]] } else { resume.chunks(per).collect() };
     let n = chunks.len();
-    chunks.into_iter().enumerate().map(|(i, c)| Msg::Accept { id, last: i + 1 == n, resume: c.to_vec() }.encode()).collect()
+    chunks
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| Msg::Accept { id, last: i + 1 == n, resume: c.to_vec() }.encode())
+        .collect()
 }
 
 // ---------------------------------------------------------------- offer / accept assembly
@@ -314,7 +318,13 @@ impl OfferAssembler {
     }
 
     /// Adds a decoded part. Returns `Ok(true)` once the list is complete.
-    pub fn push(&mut self, total_files: u32, total_bytes: u64, first: u32, files: Vec<FileEntry>) -> Result<bool, &'static str> {
+    pub fn push(
+        &mut self,
+        total_files: u32,
+        total_bytes: u64,
+        first: u32,
+        files: Vec<FileEntry>,
+    ) -> Result<bool, &'static str> {
         if total_files != self.total_files || total_bytes != self.total_bytes {
             return Err("offer parts disagree");
         }
@@ -343,7 +353,10 @@ pub enum Start {
     Skip,
     /// Continue at `offset` if the sender's own prefix hashes to `prefix` (or 0 when
     /// `offset == 0`).
-    At { offset: u64, prefix: Hash },
+    At {
+        offset: u64,
+        prefix: Hash,
+    },
 }
 
 /// Collects `Accept` parts on the sending side.
@@ -528,7 +541,9 @@ fn is_reserved(name: &str) -> bool {
     let mut chars = stem.chars();
     let prefix: String = chars.by_ref().take(3).collect();
     let rest: Vec<char> = chars.collect();
-    (prefix == "COM" || prefix == "LPT") && rest.len() == 1 && (rest[0].is_ascii_digit() || matches!(rest[0], '¹' | '²' | '³'))
+    (prefix == "COM" || prefix == "LPT")
+        && rest.len() == 1
+        && (rest[0].is_ascii_digit() || matches!(rest[0], '¹' | '²' | '³'))
 }
 
 /// Splits "name.ext" into ("name", ".ext"). A leading dot is part of the name; extensions
@@ -583,7 +598,8 @@ fn is_shell_active(name: &str) -> bool {
 /// `_con.txt`) and limits the length while keeping the extension.
 pub fn sanitize_name(raw: &str) -> Option<String> {
     let base = raw.rsplit(['/', '\\']).next().unwrap_or("");
-    let replaced: String = base.chars().filter(|c| !invisible(*c)).map(|c| if forbidden(c) { '_' } else { c }).collect();
+    let replaced: String =
+        base.chars().filter(|c| !invisible(*c)).map(|c| if forbidden(c) { '_' } else { c }).collect();
     let trimmed = replaced.trim_start_matches(' ').trim_end_matches(['.', ' ']);
     if trimmed.is_empty() {
         return None;
@@ -728,7 +744,13 @@ mod tests {
     #[test]
     fn every_message_round_trips() {
         let msgs = vec![
-            Msg::Offer { id: 7, total_files: 2, total_bytes: 3, first: 0, files: vec![FileEntry { name: "a.txt".into(), size: 1 }] },
+            Msg::Offer {
+                id: 7,
+                total_files: 2,
+                total_bytes: 3,
+                first: 0,
+                files: vec![FileEntry { name: "a.txt".into(), size: 1 }],
+            },
             Msg::Accept { id: 7, last: true, resume: vec![Resume { index: 1, offset: 5, prefix: [9; 32] }] },
             Msg::Accept { id: 7, last: false, resume: vec![] },
             Msg::Reject { id: 7, reason: "no".into() },
@@ -755,7 +777,14 @@ mod tests {
 
     #[test]
     fn hostile_bodies_are_rejected_without_panicking() {
-        let good = Msg::Offer { id: 1, total_files: 1, total_bytes: 5, first: 0, files: vec![FileEntry { name: "a".into(), size: 5 }] }.encode();
+        let good = Msg::Offer {
+            id: 1,
+            total_files: 1,
+            total_bytes: 5,
+            first: 0,
+            files: vec![FileEntry { name: "a".into(), size: 5 }],
+        }
+        .encode();
         // Every truncation and trailing garbage fail cleanly.
         for n in 0..good.len() {
             assert!(Msg::decode(&good[..n]).is_err(), "truncated at {n}");
@@ -769,8 +798,16 @@ mod tests {
             Msg::Offer { id: 1, total_files: MAX_FILES + 1, total_bytes: 0, first: 0, files: files(1, 1) }.encode(),
             Msg::Offer { id: 1, total_files: 2, total_bytes: 0, first: 2, files: files(1, 1) }.encode(),
             Msg::Offer { id: 1, total_files: u32::MAX, total_bytes: 0, first: u32::MAX, files: files(1, 1) }.encode(),
-            Msg::Offer { id: 1, total_files: 1, total_bytes: MAX_TOTAL_BYTES + 1, first: 0, files: files(1, 1) }.encode(),
-            Msg::Offer { id: 1, total_files: 1, total_bytes: 0, first: 0, files: vec![FileEntry { name: String::new(), size: 0 }] }.encode(),
+            Msg::Offer { id: 1, total_files: 1, total_bytes: MAX_TOTAL_BYTES + 1, first: 0, files: files(1, 1) }
+                .encode(),
+            Msg::Offer {
+                id: 1,
+                total_files: 1,
+                total_bytes: 0,
+                first: 0,
+                files: vec![FileEntry { name: String::new(), size: 0 }],
+            }
+            .encode(),
             vec![99, 0, 0, 0, 0, 0, 0, 0, 0],
             Msg::Ack { id: 1, bytes: 0 }.encode(),
             Msg::Ack { id: 1, bytes: CHUNK as u32 + 1 }.encode(),
@@ -790,7 +827,8 @@ mod tests {
         wire::put_u32(&mut big, CHUNK as u32 + 1);
         big.extend(std::iter::repeat_n(0, CHUNK + 1));
         assert!(Msg::decode(&big).is_err());
-        let mut acc = Msg::Accept { id: 1, last: true, resume: vec![Resume { index: 0, offset: 0, prefix: [0; 32] }] }.encode();
+        let mut acc =
+            Msg::Accept { id: 1, last: true, resume: vec![Resume { index: 0, offset: 0, prefix: [0; 32] }] }.encode();
         acc[10] = 2; // claims two entries
         assert!(Msg::decode(&acc).is_err());
         // Data whose end overflows u64.

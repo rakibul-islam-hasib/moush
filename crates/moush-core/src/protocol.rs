@@ -88,31 +88,69 @@ pub struct MonitorDesc {
 pub enum Message {
     /// First message after the secure handshake, both directions. `trusts_peer` tells
     /// the other side whether the sender already trusts its key (no pairing prompt needed).
-    Hello { version: u16, role: PeerRole, name: String, trusts_peer: bool },
+    Hello {
+        version: u16,
+        role: PeerRole,
+        name: String,
+        trusts_peer: bool,
+    },
     /// Pairing decision of the sender's user (sent immediately when the peer is trusted).
-    Authorize { accept: bool },
+    Authorize {
+        accept: bool,
+    },
     /// Orderly shutdown with a human-readable reason.
-    Bye { reason: String },
+    Bye {
+        reason: String,
+    },
     /// Client -> host: the client's monitors. Sent on connect and when displays change.
-    Screens { monitors: Vec<MonitorDesc> },
+    Screens {
+        monitors: Vec<MonitorDesc>,
+    },
     /// Host -> client: shared cursor enters this client at the given position.
-    Enter { x: i32, y: i32 },
+    Enter {
+        x: i32,
+        y: i32,
+    },
     /// Host -> client: shared cursor left; the client must release everything it holds.
     Leave,
-    MouseMove { x: i32, y: i32 },
-    MouseButton { button: MouseButton, down: bool },
-    Wheel { axis: WheelAxis, delta: i16 },
-    Key { vk: u16, scan: u16, flags: u8 },
+    MouseMove {
+        x: i32,
+        y: i32,
+    },
+    MouseButton {
+        button: MouseButton,
+        down: bool,
+    },
+    Wheel {
+        axis: WheelAxis,
+        delta: i16,
+    },
+    Key {
+        vk: u16,
+        scan: u16,
+        flags: u8,
+    },
     /// Release every key and button the receiver has injected.
     ReleaseAll,
-    Ping { id: u32, t_us: u64 },
-    Pong { id: u32, t_us: u64 },
+    Ping {
+        id: u32,
+        t_us: u64,
+    },
+    Pong {
+        id: u32,
+        t_us: u64,
+    },
     /// Both directions, after authorization and whenever local settings change: the
     /// optional features (`features::cap` bits) the sender currently allows with this peer.
-    Capabilities { features: u32 },
+    Capabilities {
+        features: u32,
+    },
     /// Both directions: traffic of an optional feature. `channel` is one of
     /// `features::channel`; the body is opaque here and at most [`MAX_FEATURE_BODY`] bytes.
-    Feature { channel: u8, body: Vec<u8> },
+    Feature {
+        channel: u8,
+        body: Vec<u8>,
+    },
 }
 
 impl fmt::Debug for Message {
@@ -134,7 +172,9 @@ impl fmt::Debug for Message {
             Message::MouseButton { button, down } => {
                 f.debug_struct("MouseButton").field("button", button).field("down", down).finish()
             }
-            Message::Wheel { axis, delta } => f.debug_struct("Wheel").field("axis", axis).field("delta", delta).finish(),
+            Message::Wheel { axis, delta } => {
+                f.debug_struct("Wheel").field("axis", axis).field("delta", delta).finish()
+            }
             Message::Key { vk, scan, flags } => {
                 f.debug_struct("Key").field("vk", vk).field("scan", scan).field("flags", flags).finish()
             }

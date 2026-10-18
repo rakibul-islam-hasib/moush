@@ -18,13 +18,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use moush_engine::core::crypto::Identity;
-use moush_engine::core::features::{cap, channel, TransferSettings};
+use moush_engine::core::features::{TransferSettings, cap, channel};
 use moush_engine::core::inject::{InjectState, Injector};
-use moush_engine::core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
+use moush_engine::core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
 use moush_engine::core::net::host::{ClientHandle, HostEvents, HostServer};
 use moush_engine::core::net::{Outgoing, PeerInfo, PeerSender};
 use moush_engine::core::pairing::PairingBroker;
-use moush_engine::core::protocol::{key_flags, Message, MonitorDesc, MouseButton, WheelAxis};
+use moush_engine::core::protocol::{Message, MonitorDesc, MouseButton, WheelAxis, key_flags};
 use moush_engine::core::stats::{LatencyRing, Stats};
 use moush_engine::core::transfer::{self as tr, FileEntry, Msg};
 use moush_engine::core::trust::TrustStore;
@@ -84,11 +84,14 @@ impl Side {
         let (tx, events) = mpsc::channel();
         let tx = Mutex::new(tx);
         let s = settings.clone();
-        svc.set_handlers(move || s.lock().unwrap().clone(), move |e| {
-            if !matches!(e, Event::Changed) {
-                let _ = tx.lock().unwrap().send(e);
-            }
-        });
+        svc.set_handlers(
+            move || s.lock().unwrap().clone(),
+            move |e| {
+                if !matches!(e, Event::Changed) {
+                    let _ = tx.lock().unwrap().send(e);
+                }
+            },
+        );
         svc.attach(&hub);
         Self { hub, svc, settings, allow, events, dir }
     }
@@ -225,7 +228,11 @@ struct Rig {
 
 fn temp_root(tag: &str) -> PathBuf {
     static N: AtomicU32 = AtomicU32::new(0);
-    let d = std::env::temp_dir().join(format!("moush-xfer-{tag}-{}-{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
+    let d = std::env::temp_dir().join(format!(
+        "moush-xfer-{tag}-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::SeqCst)
+    ));
     let _ = fs::remove_dir_all(&d);
     fs::create_dir_all(&d).unwrap();
     d
@@ -252,7 +259,11 @@ impl Rig {
         let mut rig = Rig {
             host_port: server.port(),
             _host_server: server,
-            client_events: Arc::new(ClientSide { hub: client.hub.clone(), session: Mutex::new(None), sessions: AtomicU32::new(0) }),
+            client_events: Arc::new(ClientSide {
+                hub: client.hub.clone(),
+                session: Mutex::new(None),
+                sessions: AtomicU32::new(0),
+            }),
             host,
             client,
             client_id: Identity::generate().unwrap(),
@@ -288,7 +299,15 @@ impl Rig {
                     trust: &trust,
                     broker: &broker,
                     stats: &stats,
-                    screens: vec![MonitorDesc { x: 0, y: 0, width: 1920, height: 1080, dpi: 96, primary: true, name: "M".into() }],
+                    screens: vec![MonitorDesc {
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
+                        dpi: 96,
+                        primary: true,
+                        name: "M".into(),
+                    }],
                     stop: &stop2,
                 },
                 &mut inject,
@@ -302,7 +321,10 @@ impl Rig {
         assert!(
             wait_until(Duration::from_secs(10), || {
                 let (h, c) = (self.host.hub.peers(), self.client.hub.peers());
-                h.len() == 1 && c.len() == 1 && h[0].effective_caps & cap::FILES != 0 && c[0].effective_caps & cap::FILES != 0
+                h.len() == 1
+                    && c.len() == 1
+                    && h[0].effective_caps & cap::FILES != 0
+                    && c[0].effective_caps & cap::FILES != 0
             }),
             "capabilities exchanged"
         );
@@ -315,7 +337,8 @@ impl Rig {
             link.close();
             h.join().unwrap();
         }
-        assert!(wait_until(Duration::from_secs(10), || self.host.hub.peers().is_empty() && self.client.hub.peers().is_empty()));
+        assert!(wait_until(Duration::from_secs(10), || self.host.hub.peers().is_empty()
+            && self.client.hub.peers().is_empty()));
     }
 }
 
@@ -521,7 +544,10 @@ fn disconnect_mid_transfer_then_retry_resumes_from_the_partial_file() {
     rig.disconnect();
     let out = wait_state(&rig.client, &id, State::Failed);
     assert!(out.error.as_deref().unwrap().contains("Lost the connection"), "{out:?}");
-    assert!(wait_until(Duration::from_secs(10), || rig.client.info(&id).can_retry), "retryable once the worker stopped");
+    assert!(
+        wait_until(Duration::from_secs(10), || rig.client.info(&id).can_retry),
+        "retryable once the worker stopped"
+    );
     let inc = incoming_state(&rig.host, State::Failed);
     assert!(!inc.can_retry, "only the sender retries");
     let parts = rig.host.parts();
@@ -584,7 +610,12 @@ fn offers_need_approval_and_can_be_declined() {
     let inc = incoming_state(&rig.host, State::Pending);
     assert!(inc.awaiting_approval);
     assert_eq!(inc.files, vec![FileEntry { name: "notes.txt".into(), size: 1000 }]);
-    assert!(rig.host.events.recv_timeout(Duration::from_secs(5)).is_ok_and(|e| matches!(e, Event::Incoming { needs_approval: true, .. })));
+    assert!(
+        rig.host
+            .events
+            .recv_timeout(Duration::from_secs(5))
+            .is_ok_and(|e| matches!(e, Event::Incoming { needs_approval: true, .. }))
+    );
     assert_eq!(rig.client.info(&id).state, State::Pending, "the sender waits for the answer");
     rig.host.svc.respond(&inc.id, false).unwrap();
     let out = wait_state(&rig.client, &id, State::Rejected);
@@ -719,7 +750,10 @@ fn throughput_and_input_latency() {
             s.max,
             i
         );
-        assert_eq!(file_hash(&rig.client.dir.join(if speed == "balanced" { "speed.bin" } else { "speed (1).bin" })), file_hash(&src));
+        assert_eq!(
+            file_hash(&rig.client.dir.join(if speed == "balanced" { "speed.bin" } else { "speed (1).bin" })),
+            file_hash(&src)
+        );
         rig.injected = Some(injected);
         rig.disconnect();
     }

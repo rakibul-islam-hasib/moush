@@ -10,19 +10,23 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
-use windows::core::{PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, LocalFree, ERROR_SUCCESS, FILETIME, HANDLE, HLOCAL};
-use windows::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
-use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
-use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
+use windows::Win32::Foundation::{CloseHandle, ERROR_SUCCESS, FILETIME, HANDLE, HLOCAL, LocalFree};
+use windows::Win32::Security::Cryptography::{
+    CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
+};
+use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::Registry::{
-    RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_SZ, RRF_RT_REG_SZ,
+    HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
 };
 use windows::Win32::System::SystemInformation::{ComputerNamePhysicalDnsHostname, GetComputerNameExW};
 use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, OpenProcessToken};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNORMAL};
+use windows::core::{PCWSTR, PWSTR};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -97,7 +101,9 @@ fn reg_get_string(hkey: windows::Win32::System::Registry::HKEY, subkey: &str, va
     let v = wide(value);
     unsafe {
         let mut len = 0u32;
-        if RegGetValueW(hkey, PCWSTR(sk.as_ptr()), PCWSTR(v.as_ptr()), RRF_RT_REG_SZ, None, None, Some(&mut len)) != ERROR_SUCCESS {
+        if RegGetValueW(hkey, PCWSTR(sk.as_ptr()), PCWSTR(v.as_ptr()), RRF_RT_REG_SZ, None, None, Some(&mut len))
+            != ERROR_SUCCESS
+        {
             return None;
         }
         let mut buf = vec![0u16; (len as usize / 2) + 1];
@@ -195,7 +201,8 @@ impl ProcessMonitor {
                 }
                 self.last = Some((now, busy));
             }
-            let mut mem = PROCESS_MEMORY_COUNTERS { cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32, ..Default::default() };
+            let mut mem =
+                PROCESS_MEMORY_COUNTERS { cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32, ..Default::default() };
             if K32GetProcessMemoryInfo(p, &mut mem, mem.cb).as_bool() {
                 s.memory_mb = mem.WorkingSetSize as f64 / (1024.0 * 1024.0);
             }
@@ -266,10 +273,19 @@ pub fn add_firewall_rule(exe: &Path) -> io::Result<()> {
     let file = wide("netsh.exe");
     let params = wide(params);
     let r = unsafe {
-        ShellExecuteW(None, PCWSTR(verb.as_ptr()), PCWSTR(file.as_ptr()), PCWSTR(params.as_ptr()), PCWSTR::null(), SW_HIDE)
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(file.as_ptr()),
+            PCWSTR(params.as_ptr()),
+            PCWSTR::null(),
+            SW_HIDE,
+        )
     };
     if r.0 as isize <= 32 {
-        return Err(io::Error::other("the firewall rule was not added (administrator approval was declined or failed)"));
+        return Err(io::Error::other(
+            "the firewall rule was not added (administrator approval was declined or failed)",
+        ));
     }
     Ok(())
 }
@@ -278,7 +294,9 @@ pub fn add_firewall_rule(exe: &Path) -> io::Result<()> {
 pub fn open_folder(path: &Path) -> io::Result<()> {
     let verb = wide("open");
     let p = wide(path.as_os_str());
-    let r = unsafe { ShellExecuteW(None, PCWSTR(verb.as_ptr()), PCWSTR(p.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+    let r = unsafe {
+        ShellExecuteW(None, PCWSTR(verb.as_ptr()), PCWSTR(p.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL)
+    };
     if r.0 as isize <= 32 {
         return Err(io::Error::other(format!("cannot open {}", path.display())));
     }

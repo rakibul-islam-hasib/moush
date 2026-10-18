@@ -230,12 +230,21 @@ mod tests {
     fn validation_clamps_and_normalizes() {
         let c = ClipboardSettings { max_size_kb: 0, history_limit: 10_000, ..Default::default() }.validated();
         assert_eq!((c.max_size_kb, c.history_limit), (16, 200));
-        let k = KeyboardSettings { edge_switch_modifier: "hyper".into(), local_shortcuts: vec![" ".into(); 3], ..Default::default() }
-            .validated();
+        let k = KeyboardSettings {
+            edge_switch_modifier: "hyper".into(),
+            local_shortcuts: vec![" ".into(); 3],
+            ..Default::default()
+        }
+        .validated();
         assert_eq!(k.edge_switch_modifier, "none");
         assert!(k.local_shortcuts.is_empty());
         let k = KeyboardSettings {
-            local_shortcuts: vec!["ctrl+shift+esc".into(), "Ctrl + Shift + Esc".into(), "Hyper+Q".into(), "Win+L".into()],
+            local_shortcuts: vec![
+                "ctrl+shift+esc".into(),
+                "Ctrl + Shift + Esc".into(),
+                "Hyper+Q".into(),
+                "Win+L".into(),
+            ],
             ..Default::default()
         }
         .validated();
@@ -250,7 +259,11 @@ mod tests {
         let t = TransferSettings::default();
         let all = local_caps(&c, &t, &DevicePolicy::default());
         assert_eq!(all, cap::CLIPBOARD | cap::FILES | cap::TEXT_SHARE);
-        let off = local_caps(&ClipboardSettings { enabled: false, ..c }, &t, &DevicePolicy { files: false, ..Default::default() });
+        let off = local_caps(
+            &ClipboardSettings { enabled: false, ..c },
+            &t,
+            &DevicePolicy { files: false, ..Default::default() },
+        );
         assert_eq!(off, cap::TEXT_SHARE);
     }
 

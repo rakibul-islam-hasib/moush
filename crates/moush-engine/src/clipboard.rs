@@ -24,11 +24,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use moush_core::clipboard::{
-    as_link, codec, decode_payload, encode_payload, reject, share_messages, validate_share_text, ChunkResult, Clip, ClipKind,
-    ClipMsg, Decision, FormatFilter, Incoming, Offer, ShareAssembler, ShareResult, SyncState, Version, MAX_CHUNK_DATA,
-    MAX_CLIP_BYTES,
+    ChunkResult, Clip, ClipKind, ClipMsg, Decision, FormatFilter, Incoming, MAX_CHUNK_DATA, MAX_CLIP_BYTES, Offer,
+    ShareAssembler, ShareResult, SyncState, Version, as_link, codec, decode_payload, encode_payload, reject,
+    share_messages, validate_share_text,
 };
-use moush_core::features::{cap, channel, ClipboardSettings};
+use moush_core::features::{ClipboardSettings, cap, channel};
 use moush_core::flow::{Acquire, Window};
 use moush_core::net::PeerSender;
 use moush_core::protocol::truncate_utf8;
@@ -204,7 +204,14 @@ impl UiState {
         self.next_id
     }
 
-    fn add_history(&mut self, s: &ClipboardSettings, clip: Arc<Clip>, hash: u64, origin: &'static str, source: Option<String>) {
+    fn add_history(
+        &mut self,
+        s: &ClipboardSettings,
+        clip: Arc<Clip>,
+        hash: u64,
+        origin: &'static str,
+        source: Option<String>,
+    ) {
         if !s.history {
             return;
         }
@@ -273,13 +280,25 @@ struct OutXfer {
 
 enum Work {
     LocalChanged,
-    Remote { peer: String, msg: ClipMsg },
-    CapsChanged { peer: String, caps: u32 },
+    Remote {
+        peer: String,
+        msg: ClipMsg,
+    },
+    CapsChanged {
+        peer: String,
+        caps: u32,
+    },
     PeerDown(String),
     /// A send ended without the peer receiving the clip.
-    SendFailed { peer: String, hash: u64 },
+    SendFailed {
+        peer: String,
+        hash: u64,
+    },
     /// Put a clip on the clipboard on the user's request and sync it as a local copy.
-    Write { clip: Arc<Clip>, reply: SyncSender<Result<(), String>> },
+    Write {
+        clip: Arc<Clip>,
+        reply: SyncSender<Result<(), String>>,
+    },
 }
 
 pub struct ClipboardService {
@@ -340,7 +359,9 @@ impl ClipboardService {
 
     /// Starts the service on the Windows clipboard.
     pub fn start_windows(hub: &Arc<FeatureHub>, opts: ServiceOptions) -> io::Result<Arc<Self>> {
-        Self::start(hub, opts, |cb| Ok(Arc::new(crate::win::clipboard::WinClipboard::start(cb)?) as Arc<dyn ClipboardBackend>))
+        Self::start(hub, opts, |cb| {
+            Ok(Arc::new(crate::win::clipboard::WinClipboard::start(cb)?) as Arc<dyn ClipboardBackend>)
+        })
     }
 
     fn config(&self) -> ClipboardConfig {
@@ -485,7 +506,8 @@ impl ClipboardService {
         if targets.is_empty() {
             return Err("no connected computer accepts shared text".into());
         }
-        let msgs: Vec<Vec<u8>> = share_messages(self.next_share.fetch_add(1, Ordering::Relaxed), text).iter().map(ClipMsg::encode).collect();
+        let msgs: Vec<Vec<u8>> =
+            share_messages(self.next_share.fetch_add(1, Ordering::Relaxed), text).iter().map(ClipMsg::encode).collect();
         let mut delivered = Vec::new();
         for p in &targets {
             let Some(sender) = hub.sender(&p.id) else { continue };
@@ -517,7 +539,11 @@ impl ClipboardService {
         let Some(sender) = self.hub.upgrade().and_then(|h| h.sender(peer)) else { return false };
         offer.xfer = self.next_xfer.fetch_add(1, Ordering::Relaxed);
         let window = Arc::new(Window::new(window_bytes));
-        let old = self.outgoing.lock().unwrap().insert(peer.to_owned(), OutXfer { xfer: offer.xfer, hash: offer.hash, window: window.clone() });
+        let old = self
+            .outgoing
+            .lock()
+            .unwrap()
+            .insert(peer.to_owned(), OutXfer { xfer: offer.xfer, hash: offer.hash, window: window.clone() });
         if let Some(old) = old {
             old.window.close();
             sender.try_send_feature(channel::CLIPBOARD, ClipMsg::Abort { xfer: old.xfer }.encode());
@@ -548,12 +574,22 @@ impl ClipboardService {
     }
 
     fn reply(&self, peer: &str, msg: ClipMsg) -> bool {
-        self.hub.upgrade().and_then(|h| h.sender(peer)).is_some_and(|s| s.try_send_feature(channel::CLIPBOARD, msg.encode()))
+        self.hub
+            .upgrade()
+            .and_then(|h| h.sender(peer))
+            .is_some_and(|s| s.try_send_feature(channel::CLIPBOARD, msg.encode()))
     }
 }
 
 /// Streams one clip to one peer: offer, then chunks as the flow-control window allows.
-fn send_clip(svc: Weak<ClipboardService>, peer: String, sender: PeerSender, offer: Offer, payload: Arc<Vec<u8>>, window: Arc<Window>) {
+fn send_clip(
+    svc: Weak<ClipboardService>,
+    peer: String,
+    sender: PeerSender,
+    offer: Offer,
+    payload: Arc<Vec<u8>>,
+    window: Arc<Window>,
+) {
     let xfer = offer.xfer;
     let hash = offer.hash;
     let mut delivered = sender.send_feature(channel::CLIPBOARD, ClipMsg::Offer(offer).encode(), SEND_TIMEOUT);
@@ -634,7 +670,11 @@ impl FeatureService for ClipboardService {
                 if let Err(e) = self.tx.try_send(Work::Remote { peer: peer_id.to_owned(), msg }) {
                     log::warn!("clipboard queue full; dropping a message from {peer_id}");
                     // Stop the sender instead of letting it stall on a broken transfer.
-                    if let TrySendError::Full(Work::Remote { msg: ClipMsg::Offer(Offer { xfer, .. }) | ClipMsg::Chunk { xfer, .. }, .. }) = e {
+                    if let TrySendError::Full(Work::Remote {
+                        msg: ClipMsg::Offer(Offer { xfer, .. }) | ClipMsg::Chunk { xfer, .. },
+                        ..
+                    }) = e
+                    {
                         self.reply(peer_id, ClipMsg::Reject { xfer, reason: reject::BUSY });
                     }
                 }
@@ -758,7 +798,8 @@ impl Worker {
             self.local_changed(svc);
         }
         self.flush_acks(svc);
-        let stalled: Vec<String> = self.incoming.iter().filter(|(_, (_, t))| t.elapsed() > INCOMING_IDLE).map(|(p, _)| p.clone()).collect();
+        let stalled: Vec<String> =
+            self.incoming.iter().filter(|(_, (_, t))| t.elapsed() > INCOMING_IDLE).map(|(p, _)| p.clone()).collect();
         for peer in stalled {
             if let Some((inc, _)) = self.incoming.remove(&peer) {
                 log::warn!("clipboard transfer from {peer} stalled; dropped");
@@ -795,7 +836,11 @@ impl Worker {
         if !self.state.should_read(backend.sequence()) {
             return;
         }
-        let opts = ReadOptions { filter: cfg.filter(), skip_sensitive: cfg.clipboard.skip_sensitive, max_bytes: cfg.max_bytes() };
+        let opts = ReadOptions {
+            filter: cfg.filter(),
+            skip_sensitive: cfg.clipboard.skip_sensitive,
+            max_bytes: cfg.max_bytes(),
+        };
         let read = backend.read(&opts);
         if read.is_ok() {
             self.read_failures = 0;
@@ -821,9 +866,14 @@ impl Worker {
                 None => {
                     self.state.should_read(seq);
                     if oversized {
-                        log::info!("clipboard content above the {} KB limit was not synchronized", cfg.clipboard.max_size_kb);
-                        svc.ui.lock().unwrap().status.error =
-                            Some(format!("The last copy was larger than {} KB and was not synchronized", cfg.clipboard.max_size_kb));
+                        log::info!(
+                            "clipboard content above the {} KB limit was not synchronized",
+                            cfg.clipboard.max_size_kb
+                        );
+                        svc.ui.lock().unwrap().status.error = Some(format!(
+                            "The last copy was larger than {} KB and was not synchronized",
+                            cfg.clipboard.max_size_kb
+                        ));
                         svc.changed();
                     }
                 }
@@ -833,7 +883,14 @@ impl Worker {
 
     /// A new local clip: becomes the current clip and goes to every peer.
     /// `seq`: the sequence number it was read at (`read`) or written at by us (`!read`).
-    fn local_copy(&mut self, svc: &Arc<ClipboardService>, cfg: &ClipboardConfig, clip: Clip, seq: Option<u32>, read: bool) {
+    fn local_copy(
+        &mut self,
+        svc: &Arc<ClipboardService>,
+        cfg: &ClipboardConfig,
+        clip: Clip,
+        seq: Option<u32>,
+        read: bool,
+    ) {
         let hash = clip.hash();
         let version = match (seq, read) {
             (Some(s), false) => self.state.local_write(s, hash, now_ms()),
@@ -870,7 +927,8 @@ impl Worker {
         from: Option<&str>,
     ) -> Vec<String> {
         let Some(hub) = svc.hub.upgrade() else { return Vec::new() };
-        let peers: Vec<PeerSummary> = hub.peers().into_iter().filter(|p| p.effective_caps & cap::CLIPBOARD != 0).collect();
+        let peers: Vec<PeerSummary> =
+            hub.peers().into_iter().filter(|p| p.effective_caps & cap::CLIPBOARD != 0).collect();
         let ids: Vec<String> = peers.iter().map(|p| p.id.clone()).collect();
         let targets = self.state.targets(&ids, from, version, hash);
         if targets.is_empty() {
@@ -898,7 +956,9 @@ impl Worker {
 
     /// Our clip is newer than what `peer` offered: make sure the peer gets ours.
     fn send_back(&mut self, svc: &Arc<ClipboardService>, peer: &str) {
-        let (Some((clip, origin_name)), Some(cur)) = (self.current.clone(), self.state.current().cloned()) else { return };
+        let (Some((clip, origin_name)), Some(cur)) = (self.current.clone(), self.state.current().cloned()) else {
+            return;
+        };
         let Some(hub) = svc.hub.upgrade() else { return };
         if hub.effective_caps(peer) & cap::CLIPBOARD == 0 || cur.version.origin == peer {
             return;
@@ -1001,7 +1061,9 @@ impl Worker {
             refuse(reject::DISABLED);
             return;
         }
-        let decompress = |c: u8, data: &[u8], n: usize| (c == codec::XPRESS_HUFF).then(|| crate::win::clipboard::decompress(data, n)).flatten();
+        let decompress = |c: u8, data: &[u8], n: usize| {
+            (c == codec::XPRESS_HUFF).then(|| crate::win::clipboard::decompress(data, n)).flatten()
+        };
         let clip = match decode_payload(&buf, offer.raw_len as usize, cfg.max_bytes(), decompress) {
             Ok(c) if c.hash() == offer.hash => c,
             Ok(_) => {
