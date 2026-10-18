@@ -17,7 +17,7 @@ import { InfoBar } from "../components/InfoBar";
 import { Page } from "../components/Page";
 import { ProgressRing } from "../components/ProgressRing";
 import { Select, type SelectOption } from "../components/Select";
-import { ApplyHint, EmptyState } from "../components/SettingsCard";
+import { EmptyState } from "../components/SettingsCard";
 import { ShortcutEditor } from "../components/ShortcutEditor";
 import { Slider } from "../components/Slider";
 import { ToggleSwitch } from "../components/ToggleSwitch";
@@ -249,8 +249,8 @@ function KeyboardCard({ open, onOpenChange, isHost, hostName }: { open: boolean;
           title="Focus the window under the cursor"
           description={
             <>
-              When the shared cursor arrives on this computer, bring the window under it to the front so typing goes there.{" "}
-              <ApplyHint>Applies on reconnect</ApplyHint>
+              When the shared cursor arrives on this computer, bring the window under it to the front so typing goes there. Applies right
+              away.
             </>
           }
         >

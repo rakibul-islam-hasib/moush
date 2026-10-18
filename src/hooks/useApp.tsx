@@ -6,6 +6,7 @@ import { Logo } from "../components/Logo";
 import { ProgressRing } from "../components/ProgressRing";
 import { errorMessage } from "../lib/errors";
 import { share } from "../lib/share";
+import { parseShortcut } from "../lib/shortcuts";
 import { useToast } from "./useToast";
 
 export interface UpdateOptions {
@@ -123,6 +124,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [clientState, toast]);
 
+  /** The backend normalises local shortcuts and drops entries it can't use: say so. */
+  const reportDroppedShortcuts = useCallback(
+    (sent: string[], saved: string[]) => {
+      const kept = new Set(saved.map((x) => x.toLowerCase().replace(/\s+/g, "")));
+      const dropped = sent.filter((x) => {
+        const parsed = parseShortcut(x);
+        const key = (parsed.ok ? parsed.value : x).toLowerCase().replace(/\s+/g, "");
+        return !kept.has(key);
+      });
+      if (dropped.length > 0) {
+        toast.notify(
+          "warning",
+          `Moush can't keep ${dropped.join(", ")} on this computer, so ${dropped.length === 1 ? "it was" : "they were"} removed from the list.`,
+          "Shortcut removed",
+        );
+      }
+    },
+    [toast],
+  );
+
   /**
    * Saves the latest draft. Saves never overlap: edits made while a save is in flight
    * are sent right after it, so the backend always ends with the newest settings.
@@ -145,6 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         try {
           const saved = await backend.api.updateSettings(body);
           confirmed.current = saved;
+          reportDroppedShortcuts(body.keyboard.localShortcuts, saved.keyboard.localShortcuts);
           if (draft.current === sent && timer.current === undefined) {
             draft.current = saved;
             setSettings(saved);

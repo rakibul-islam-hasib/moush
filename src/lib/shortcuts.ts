@@ -1,7 +1,8 @@
 // Parsing and validation of shortcut text such as "Ctrl+Shift+Esc" for the
 // "keep on this computer" list (settings.keyboard.localShortcuts).
 //
-// Grammar: zero or more modifiers (Ctrl, Alt, Shift, Win) followed by exactly one key,
+// Same rules as moush-core keys.rs (the backend normalises and drops invalid entries).
+// Grammar: one or more modifiers (Ctrl, Alt, Shift, Win) followed by exactly one key,
 // joined with "+". Names are case-insensitive and normalised to the canonical form
 // below (modifiers in the order Ctrl, Alt, Shift, Win).
 
@@ -19,49 +20,40 @@ const MODIFIERS: Record<string, string> = {
 };
 const MOD_ORDER = ["Ctrl", "Alt", "Shift", "Win"];
 
+// Mirrors moush-core keys.rs (parse_shortcut / Display): canonical names first, then aliases.
 const NAMED_KEYS: Record<string, string> = {
+  tab: "Tab",
   esc: "Esc",
   escape: "Esc",
-  tab: "Tab",
   space: "Space",
   enter: "Enter",
   return: "Enter",
-  backspace: "Backspace",
-  delete: "Delete",
-  del: "Delete",
-  insert: "Insert",
-  ins: "Insert",
   home: "Home",
   end: "End",
-  pageup: "PageUp",
-  pgup: "PageUp",
-  pagedown: "PageDown",
-  pgdn: "PageDown",
-  up: "Up",
-  down: "Down",
+  pgup: "PgUp",
+  pageup: "PgUp",
+  pgdn: "PgDn",
+  pagedown: "PgDn",
+  insert: "Insert",
+  ins: "Insert",
+  delete: "Delete",
+  del: "Delete",
   left: "Left",
   right: "Right",
-  printscreen: "PrintScreen",
-  prtsc: "PrintScreen",
-  print: "PrintScreen",
-  pause: "Pause",
-  break: "Pause",
-  capslock: "CapsLock",
-  numlock: "NumLock",
-  apps: "Apps",
-  menu: "Apps",
+  up: "Up",
+  down: "Down",
+  arrowleft: "Left",
+  arrowright: "Right",
+  arrowup: "Up",
+  arrowdown: "Down",
 };
-
-/** Keys that are reasonable on their own (without a modifier). */
-const STANDALONE = new Set(["PrintScreen", "Pause"]);
 
 function normaliseKey(raw: string): string | null {
   const t = raw.trim();
-  const lower = t.toLowerCase();
   if (/^[a-z0-9]$/i.test(t)) return t.toUpperCase();
   const f = /^f([1-9]|1\d|2[0-4])$/i.exec(t);
   if (f) return `F${f[1]}`;
-  return NAMED_KEYS[lower] ?? null;
+  return NAMED_KEYS[t.toLowerCase()] ?? null;
 }
 
 export type ParseResult = { ok: true; value: string } | { ok: false; error: string };
@@ -89,11 +81,11 @@ export function parseShortcut(text: string): ParseResult {
   if (MODIFIERS[last.toLowerCase()]) return { ok: false, error: "End the shortcut with a key, for example Ctrl+Shift+Esc." };
   const key = normaliseKey(last);
   if (!key) {
-    return { ok: false, error: `"${last}" isn't a key Moush knows. Use a letter, a digit, F1–F24 or a name such as Esc, Tab, Delete or PrintScreen.` };
+    return { ok: false, error: `"${last}" isn't a key Moush knows. Use a letter, a digit, F1–F24, an arrow, Tab, Esc, Space, Enter, Home, End, PgUp, PgDn, Insert or Delete.` };
   }
-  const isFunction = /^F\d+$/.test(key);
-  if (mods.size === 0 && !isFunction && !STANDALONE.has(key)) {
-    return { ok: false, error: "Add at least one modifier (Ctrl, Alt, Shift or Win), or use a function key." };
+  if (mods.size === 0) return { ok: false, error: "Add at least one modifier (Ctrl, Alt, Shift or Win) so ordinary typing is never kept here." };
+  if (mods.size === 2 && mods.has("Ctrl") && mods.has("Alt") && key === "Delete") {
+    return { ok: false, error: "Ctrl+Alt+Delete is always handled by Windows on the computer where it's pressed." };
   }
   const ordered = MOD_ORDER.filter((m) => mods.has(m));
   return { ok: true, value: [...ordered, key].join("+") };
@@ -116,4 +108,9 @@ export function validateNewShortcut(text: string, existing: readonly string[]): 
   return r;
 }
 
-export const SHORTCUT_SUGGESTIONS = ["Ctrl+Shift+Esc", "Win+D", "Win+E", "Alt+PrintScreen", "Ctrl+Alt+T"];
+export const SHORTCUT_SUGGESTIONS = ["Ctrl+Shift+Esc", "Win+D", "Win+E", "Win+L", "Ctrl+Alt+T"];
+
+/** Extra explanation for shortcuts with special behaviour. */
+export function shortcutNote(shortcut: string): string | null {
+  return shortcut === "Win+L" ? "Win+L always locks this computer; keeping it here only makes that explicit." : null;
+}
