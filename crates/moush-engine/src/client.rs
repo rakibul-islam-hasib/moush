@@ -298,7 +298,7 @@ impl Injector for DryRunInjector {
         true
     }
     fn key(&mut self, vk: u16, scan: u16, ext: bool, down: bool, _by_vk: bool) -> bool {
-        log::info!("[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}", if ext { " ext" } else { "" }, if down { "down" } else { "up" });
+        log::debug!("[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}", if ext { " ext" } else { "" }, if down { "down" } else { "up" });
         true
     }
 }

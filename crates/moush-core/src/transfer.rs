@@ -563,6 +563,18 @@ fn limit_length(name: &str, max_units: usize) -> String {
     format!("{out}{ext}")
 }
 
+/// Files that Explorer reads when it merely *displays* a folder; their icon or location
+/// fields can point at a remote share and leak the user's NTLM credentials without anything
+/// being opened. Received ones get `.txt` appended so they stay inert.
+const SHELL_ACTIVE_EXTENSIONS: [&str; 6] = ["scf", "url", "lnk", "library-ms", "searchconnector-ms", "website"];
+const SHELL_ACTIVE_NAMES: [&str; 3] = ["desktop.ini", "autorun.inf", "folder.htt"];
+
+fn is_shell_active(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    SHELL_ACTIVE_NAMES.contains(&lower.as_str())
+        || lower.rsplit_once('.').is_some_and(|(_, ext)| SHELL_ACTIVE_EXTENSIONS.contains(&ext))
+}
+
 /// Turns any string into a safe bare file name for Windows, or `None` if nothing usable
 /// remains. Keeps only the last path component, replaces characters Windows forbids
 /// (including `:`, which would address an alternate data stream), drops invisible
@@ -583,6 +595,9 @@ pub fn sanitize_name(raw: &str) -> Option<String> {
     // Never let a received name look like one of our partial files.
     if name.to_lowercase().ends_with(PART_SUFFIX) {
         name.push('_');
+    }
+    if is_shell_active(&name) {
+        name.push_str(".txt");
     }
     let name = limit_length(&name, MAX_NAME_UNITS);
     (!name.is_empty()).then_some(name)
@@ -875,6 +890,12 @@ mod tests {
         assert_eq!(s("photo\u{202E}gpj.exe").as_deref(), Some("photogpj.exe"));
         assert_eq!(s("Prüfung — 日本語 😀.txt").as_deref(), Some("Prüfung — 日本語 😀.txt"));
         assert_eq!(s("x.moushpart").as_deref(), Some("x.moushpart_"));
+        // Files Explorer parses while showing the folder are kept inert.
+        assert_eq!(s("Desktop.ini").as_deref(), Some("Desktop.ini.txt"));
+        assert_eq!(s("share.SCF").as_deref(), Some("share.SCF.txt"));
+        assert_eq!(s("site.url").as_deref(), Some("site.url.txt"));
+        assert_eq!(s("x.searchConnector-ms").as_deref(), Some("x.searchConnector-ms.txt"));
+        assert_eq!(s("notes.url.md").as_deref(), Some("notes.url.md"));
         // Length limit keeps the extension and counts UTF-16 units.
         let long = format!("{}.docx", "😀".repeat(200));
         let out = s(&long).unwrap();

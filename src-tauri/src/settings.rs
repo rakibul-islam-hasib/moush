@@ -3,12 +3,18 @@
 //! The file carries a schema `version`. Missing fields take their defaults, unknown
 //! fields are ignored, older versions are migrated on load, and an unreadable file is
 //! kept aside as `settings.corrupt.json` instead of being silently overwritten.
+//!
+//! Loading fails *closed* for privacy: a field with an invalid value falls back to its
+//! default individually (every other field is kept), and when the file cannot be parsed
+//! at all, clipboard sync and file transfer start disabled instead of at their defaults.
 
 use std::fs;
 use std::io;
 use std::path::Path;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use moush_engine::core::features::{ClipboardSettings, KeyboardSettings, NotificationSettings, TransferSettings};
 use moush_engine::core::protocol::DEFAULT_PORT;
@@ -143,6 +149,49 @@ impl Settings {
     }
 }
 
+/// Deserializes `v` into `T`, starting from `T::default()` and applying the fields of `v`
+/// one at a time (recursing into objects): a field whose value does not fit is skipped and
+/// reported by path, every other field is kept.
+fn lenient<T: DeserializeOwned + Serialize + Default>(v: &Value) -> (T, Vec<String>) {
+    fn merge<T: DeserializeOwned>(root: &mut Value, path: &mut Vec<String>, src: &Value, rejected: &mut Vec<String>) {
+        let Value::Object(fields) = src else { return };
+        for (key, value) in fields {
+            path.push(key.clone());
+            let target_is_object = pointer(root, path).is_some_and(Value::is_object);
+            if value.is_object() && target_is_object {
+                merge::<T>(root, path, value, rejected);
+            } else {
+                let mut candidate = root.clone();
+                if let Some(slot) = pointer_mut(&mut candidate, path) {
+                    *slot = value.clone();
+                } else if let Some(Value::Object(parent)) = pointer_mut(&mut candidate, &path[..path.len() - 1]) {
+                    // Unknown at this level (or an optional field absent from the defaults).
+                    parent.insert(key.clone(), value.clone());
+                }
+                if serde_json::from_value::<T>(candidate.clone()).is_ok() {
+                    *root = candidate;
+                } else {
+                    rejected.push(path.join("."));
+                }
+            }
+            path.pop();
+        }
+    }
+    fn pointer<'a>(v: &'a Value, path: &[String]) -> Option<&'a Value> {
+        path.iter().try_fold(v, |v, k| v.get(k))
+    }
+    fn pointer_mut<'a>(v: &'a mut Value, path: &[String]) -> Option<&'a mut Value> {
+        path.iter().try_fold(v, |v, k| v.get_mut(k))
+    }
+    let mut root = serde_json::to_value(T::default()).unwrap_or(Value::Null);
+    let mut rejected = Vec::new();
+    if !v.is_object() {
+        rejected.push("(whole file)".into());
+    }
+    merge::<T>(&mut root, &mut Vec::new(), v, &mut rejected);
+    (serde_json::from_value(root).unwrap_or_default(), rejected)
+}
+
 /// Current schema version of the settings file.
 pub const CONFIG_VERSION: u32 = 2;
 
@@ -160,19 +209,44 @@ pub struct Config {
 
 impl Config {
     pub fn load(path: &Path, default_name: &str) -> Config {
+        let keep_corrupt = || {
+            let _ = fs::copy(path, path.with_file_name("settings.corrupt.json"));
+        };
         let mut c = match fs::read_to_string(path) {
-            Ok(s) => serde_json::from_str::<Config>(&s).unwrap_or_else(|e| {
-                log::warn!("settings file unreadable ({e}); keeping it as settings.corrupt.json and using defaults");
-                let _ = fs::copy(path, path.with_file_name("settings.corrupt.json"));
-                Config::default()
-            }),
+            Ok(s) => match serde_json::from_str::<Value>(&s) {
+                Ok(v) => {
+                    let (c, rejected) = lenient::<Config>(&v);
+                    if !rejected.is_empty() {
+                        log::warn!("settings: invalid value(s) for {} reset to default", rejected.join(", "));
+                        keep_corrupt();
+                    }
+                    c
+                }
+                Err(e) => {
+                    log::warn!(
+                        "settings file unreadable ({e}); keeping it as settings.corrupt.json; clipboard sync and \
+                         file transfer stay off until re-enabled"
+                    );
+                    keep_corrupt();
+                    let mut c = Config::default();
+                    c.settings.clipboard.enabled = false;
+                    c.settings.transfer.enabled = false;
+                    c
+                }
+            },
             Err(_) => Config { version: CONFIG_VERSION, ..Config::default() },
         };
         c.migrate();
         if c.settings.device_name.trim().is_empty() {
             c.settings.device_name = default_name.to_owned();
         }
-        c.settings = c.settings.clone().validated().unwrap_or_else(|_| Settings { device_name: default_name.to_owned(), ..Settings::default() });
+        c.settings = match c.settings.clone().validated() {
+            Ok(s) => s,
+            // Only the port can still be invalid here; keep everything else.
+            Err(_) => Settings { port: DEFAULT_PORT, ..c.settings.clone() }
+                .validated()
+                .unwrap_or_else(|_| Settings { device_name: default_name.to_owned(), ..Settings::default() }),
+        };
         c
     }
 
@@ -250,6 +324,32 @@ mod tests {
         let c = Config::load(&path, "Fallback");
         assert_eq!(c.settings.device_name, "Fallback");
         assert!(dir.join("settings.corrupt.json").exists());
+        assert!(!c.settings.clipboard.enabled && !c.settings.transfer.enabled, "unreadable file fails closed");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn one_bad_field_does_not_reset_the_others() {
+        let dir = std::env::temp_dir().join(format!("moush-settings-lenient-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        fs::write(
+            &path,
+            r#"{"version":2,"role":"client","settings":{"deviceName":"Desk","port":"oops",
+                "clipboard":{"enabled":false,"maxSizeKb":-5,"history":false},
+                "transfer":{"enabled":false,"askBeforeReceiving":"yes"},"lastHostAddress":"10.0.0.2:24800"}}"#,
+        )
+        .unwrap();
+        let c = Config::load(&path, "Fallback");
+        assert_eq!(c.role, Some(Role::Client));
+        assert_eq!(c.settings.device_name, "Desk");
+        assert_eq!(c.settings.port, DEFAULT_PORT, "bad port falls back alone");
+        assert!(!c.settings.clipboard.enabled && !c.settings.clipboard.history, "privacy choices survive");
+        assert_eq!(c.settings.clipboard.max_size_kb, ClipboardSettings::default().max_size_kb);
+        assert!(!c.settings.transfer.enabled);
+        assert!(c.settings.transfer.ask_before_receiving, "invalid value -> safe default");
+        assert_eq!(c.settings.last_host_address.as_deref(), Some("10.0.0.2:24800"));
+        assert!(dir.join("settings.corrupt.json").exists(), "the original is kept for inspection");
         let _ = fs::remove_dir_all(dir);
     }
 }
