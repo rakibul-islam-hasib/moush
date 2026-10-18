@@ -81,7 +81,10 @@ pub struct MonitorDesc {
     pub name: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// `Debug` is implemented by hand: it never prints the contents of a feature body
+/// (clipboard text, file data), only its channel and length, so logging a message for
+/// diagnostics cannot leak user data.
+#[derive(Clone, PartialEq)]
 pub enum Message {
     /// First message after the secure handshake, both directions. `trusts_peer` tells
     /// the other side whether the sender already trusts its key (no pairing prompt needed).
@@ -110,6 +113,44 @@ pub enum Message {
     /// Both directions: traffic of an optional feature. `channel` is one of
     /// `features::channel`; the body is opaque here and at most [`MAX_FEATURE_BODY`] bytes.
     Feature { channel: u8, body: Vec<u8> },
+}
+
+impl fmt::Debug for Message {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Message::Hello { version, role, name, trusts_peer } => f
+                .debug_struct("Hello")
+                .field("version", version)
+                .field("role", role)
+                .field("name", name)
+                .field("trusts_peer", trusts_peer)
+                .finish(),
+            Message::Authorize { accept } => f.debug_struct("Authorize").field("accept", accept).finish(),
+            Message::Bye { reason } => f.debug_struct("Bye").field("reason", reason).finish(),
+            Message::Screens { monitors } => f.debug_struct("Screens").field("monitors", monitors).finish(),
+            Message::Enter { x, y } => f.debug_struct("Enter").field("x", x).field("y", y).finish(),
+            Message::Leave => f.write_str("Leave"),
+            Message::MouseMove { x, y } => f.debug_struct("MouseMove").field("x", x).field("y", y).finish(),
+            Message::MouseButton { button, down } => {
+                f.debug_struct("MouseButton").field("button", button).field("down", down).finish()
+            }
+            Message::Wheel { axis, delta } => f.debug_struct("Wheel").field("axis", axis).field("delta", delta).finish(),
+            Message::Key { vk, scan, flags } => {
+                f.debug_struct("Key").field("vk", vk).field("scan", scan).field("flags", flags).finish()
+            }
+            Message::ReleaseAll => f.write_str("ReleaseAll"),
+            Message::Ping { id, t_us } => f.debug_struct("Ping").field("id", id).field("t_us", t_us).finish(),
+            Message::Pong { id, t_us } => f.debug_struct("Pong").field("id", id).field("t_us", t_us).finish(),
+            Message::Capabilities { features } => {
+                f.debug_struct("Capabilities").field("features", &format_args!("{features:#x}")).finish()
+            }
+            Message::Feature { channel, body } => f
+                .debug_struct("Feature")
+                .field("channel", channel)
+                .field("body", &format_args!("<{} bytes>", body.len()))
+                .finish(),
+        }
+    }
 }
 
 impl Message {

@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use super::{
     hello_and_authorize, handle_keepalive, run_writer, split_channel, try_send, AuthCtx, AuthError, BulkGate, ConnShared,
-    Outbox, Outgoing, PeerInfo, PeerSender, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, WRITE_TIMEOUT,
+    Outbox, Outgoing, PeerInfo, PeerSender, SetupDeadline, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, SETUP_DEADLINE,
+    WRITE_TIMEOUT,
 };
 use crate::crypto::{handshake, Identity};
 use crate::inject::{InjectState, Injector};
@@ -236,6 +237,7 @@ fn setup(stream: &mut TcpStream, cfg: &SessionConfig<'_>) -> Result<(PeerInfo, s
     stream.set_nodelay(true).map_err(lost)?;
     stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
     stream.set_write_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
+    let deadline = SetupDeadline::arm(stream, SETUP_DEADLINE).map_err(lost)?;
     let ch = handshake(stream, cfg.identity, true).map_err(|e| SessionEnd::Lost(format!("secure handshake failed: {e}")))?;
     let remote = *ch.remote_static();
     let remote_id = crate::crypto::device_id(&remote);
@@ -249,7 +251,15 @@ fn setup(stream: &mut TcpStream, cfg: &SessionConfig<'_>) -> Result<(PeerInfo, s
     }
     let code = ch.verification_code();
     let (mut r, w) = split_channel(ch, stream, cfg.stats).map_err(lost)?;
-    let auth = AuthCtx { trust: cfg.trust, broker: cfg.broker, my_role: PeerRole::Client, my_name: cfg.name, code };
+    let auth = AuthCtx {
+        trust: cfg.trust,
+        broker: cfg.broker,
+        my_role: PeerRole::Client,
+        my_name: cfg.name,
+        code,
+        deadline: Some(&deadline),
+        on_hello: None,
+    };
     let (peer, mut w, newly) = hello_and_authorize(&mut r, w, remote, cfg.addr, &auth).map_err(|e| match e {
         AuthError::Io(e) => SessionEnd::Lost(e.to_string()),
         other => SessionEnd::Fatal(other.to_string()),

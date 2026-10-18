@@ -10,6 +10,8 @@
 //! allows with it (`features::cap` bits from the policy callback). Services must only
 //! *send* when [`FeatureHub::effective_caps`] has the bit, and must re-check their own
 //! settings and [`FeatureHub::local_caps`] before acting on anything they *receive*.
+//! As a second line of defence the hub itself drops traffic from stale connections and
+//! on a known channel whose capability this side does not allow with the peer.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -56,11 +58,19 @@ pub struct FeatureHub {
     peers: Mutex<HashMap<String, PeerEntry>>,
     /// Capability bits this side allows with a peer id.
     policy: RwLock<Policy>,
+    /// Serializes `refresh_caps`, so two concurrent refreshes cannot apply an older
+    /// evaluation of the policy after a newer one.
+    refresh: Mutex<()>,
 }
 
 impl Default for FeatureHub {
     fn default() -> Self {
-        Self { services: RwLock::new(Vec::new()), peers: Mutex::new(HashMap::new()), policy: RwLock::new(Box::new(|_| 0)) }
+        Self {
+            services: RwLock::new(Vec::new()),
+            peers: Mutex::new(HashMap::new()),
+            policy: RwLock::new(Box::new(|_| 0)),
+            refresh: Mutex::new(()),
+        }
     }
 }
 
@@ -110,18 +120,22 @@ impl FeatureHub {
     /// Recomputes what this side allows with every peer and re-announces it. Call after
     /// settings or device policies change.
     pub fn refresh_caps(&self) {
+        // The policy reads settings and the trust store: evaluate it without holding the
+        // peers lock, which reader threads (the client's injection thread) take per message.
+        let _serial = self.refresh.lock().unwrap();
+        let ids: Vec<String> = self.peers.lock().unwrap().keys().cloned().collect();
+        let wanted: Vec<(u32, String)> = ids.into_iter().map(|id| (self.local_caps(&id), id)).collect();
         let mut changed = Vec::new();
         {
-            let policy = self.policy.read().unwrap();
             let mut peers = self.peers.lock().unwrap();
-            for (id, p) in peers.iter_mut() {
-                let caps = policy(id);
+            for (caps, id) in wanted {
+                let Some(p) = peers.get_mut(&id) else { continue };
                 if caps != p.local_caps {
                     let before = p.local_caps & p.remote_caps;
                     p.local_caps = caps;
                     p.sender.send_control(Message::Capabilities { features: caps });
                     if before != caps & p.remote_caps {
-                        changed.push((id.clone(), caps & p.remote_caps));
+                        changed.push((id, caps & p.remote_caps));
                     }
                 }
             }
@@ -157,6 +171,11 @@ impl FeatureHub {
         for s in &services {
             s.peer_up(&summary);
         }
+        // Settings may have changed between computing `local` and inserting the peer (a
+        // concurrent refresh_caps would not have seen it yet).
+        if self.local_caps(id) != local {
+            self.refresh_caps();
+        }
     }
 
     /// A peer disconnected. Ignored if it already reconnected (`conn_no` is stale).
@@ -181,16 +200,32 @@ impl FeatureHub {
         let eff = {
             let mut peers = self.peers.lock().unwrap();
             let Some(p) = peers.get_mut(id).filter(|p| p.conn_no == conn_no) else { return };
+            let before = p.local_caps & p.remote_caps;
             p.remote_caps = features;
-            p.local_caps & features
+            let after = p.local_caps & features;
+            // A peer repeating the same announcement (or flooding it) causes no callbacks.
+            if after == before {
+                return;
+            }
+            after
         };
         for s in self.services() {
             s.caps_changed(id, eff);
         }
     }
 
+    /// Feature traffic from a peer. Dropped when it comes from a connection that is not
+    /// the peer's current one, or on a channel whose features this side does not allow
+    /// with that peer (services still re-check their own settings).
     pub fn on_feature(&self, id: &str, conn_no: u64, channel: u8, body: Vec<u8>) {
-        if !self.peers.lock().unwrap().get(id).is_some_and(|p| p.conn_no == conn_no) {
+        let local = match self.peers.lock().unwrap().get(id).filter(|p| p.conn_no == conn_no) {
+            Some(p) => p.local_caps,
+            None => return,
+        };
+        if let Some(needed) = channel_caps(channel)
+            && local & needed == 0
+        {
+            log::debug!("dropping feature traffic on channel {channel}: not allowed with this peer");
             return;
         }
         let service = self.services.read().unwrap().iter().find(|s| s.channel() == channel).cloned();
@@ -198,5 +233,16 @@ impl FeatureHub {
             Some(s) => s.on_message(id, body),
             None => log::debug!("ignoring feature traffic on unknown channel {channel}"),
         }
+    }
+}
+
+/// Capability bits that make traffic on a known channel acceptable (any one of them).
+/// `None` for channels the core does not know; their services decide alone.
+fn channel_caps(channel: u8) -> Option<u32> {
+    use moush_core::features::{cap, channel as ch};
+    match channel {
+        ch::CLIPBOARD => Some(cap::CLIPBOARD | cap::TEXT_SHARE),
+        ch::FILES => Some(cap::FILES),
+        _ => None,
     }
 }

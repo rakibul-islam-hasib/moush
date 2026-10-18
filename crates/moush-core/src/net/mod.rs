@@ -45,6 +45,11 @@ pub const OUTBOX_CAPACITY: usize = 4096;
 const PROBE_ID_BASE: u32 = 0x8000_0000;
 /// Bulk (feature) messages that may wait in one connection's queue at a time.
 pub const MAX_BULK_QUEUED: usize = 16;
+/// Decoded-message capacity a reader keeps between frames.
+const BATCH_KEEP: usize = 1024;
+/// Longest time an incoming connection may take for the secure handshake and `Hello`,
+/// however slowly the peer drips bytes (each read alone is bounded by `HANDSHAKE_TIMEOUT`).
+pub(crate) const SETUP_DEADLINE: Duration = Duration::from_secs(10);
 
 /// A message queued for sending, stamped with the time it was captured.
 pub struct Outgoing {
@@ -74,7 +79,8 @@ pub struct BulkGate {
 
 impl BulkGate {
     fn enter(&self, timeout: Option<Duration>) -> bool {
-        let deadline = timeout.map(|t| Instant::now() + t);
+        // `checked_add`: a huge timeout (e.g. `Duration::MAX`) means "wait as long as needed".
+        let deadline = timeout.map(|t| Instant::now().checked_add(t));
         let mut s = self.state.lock().unwrap();
         loop {
             if s.1 {
@@ -85,7 +91,8 @@ impl BulkGate {
                 return true;
             }
             let left = match deadline {
-                Some(d) => d.saturating_duration_since(Instant::now()),
+                Some(Some(d)) => d.saturating_duration_since(Instant::now()),
+                Some(None) => Duration::from_secs(3600),
                 None => return false,
             };
             if left.is_zero() {
@@ -124,6 +131,12 @@ impl PeerSender {
     /// Queues a small control message (e.g. `Capabilities`) without blocking.
     pub fn send_control(&self, msg: protocol::Message) -> bool {
         debug_assert!(!msg.is_bulk());
+        // Bulk messages must go through the gate (and its size check); refusing them here
+        // also in release builds keeps a misuse from filling the queue input depends on.
+        if msg.is_bulk() {
+            log::error!("send_control used for a bulk message; use send_feature");
+            return false;
+        }
         try_send(&self.outbox, Outgoing::untimed(msg))
     }
 
@@ -166,7 +179,16 @@ pub fn try_send(outbox: &Outbox, msg: Outgoing) -> bool {
     match outbox.try_send(msg) {
         Ok(()) => true,
         Err(TrySendError::Full(_)) => {
-            log::warn!("outgoing queue full; peer is not keeping up");
+            // A peer that floods pings without reading would otherwise write one line per
+            // ping into the log file: report at most once per second.
+            static LAST_WARN_MS: AtomicU64 = AtomicU64::new(0);
+            let now = mono_ms();
+            let last = LAST_WARN_MS.load(Ordering::Relaxed);
+            if (last == 0 || now.saturating_sub(last) >= 1000)
+                && LAST_WARN_MS.compare_exchange(last, now.max(1), Ordering::Relaxed, Ordering::Relaxed).is_ok()
+            {
+                log::warn!("outgoing queue full; peer is not keeping up");
+            }
             false
         }
         Err(TrySendError::Disconnected(_)) => false,
@@ -245,6 +267,11 @@ impl MsgReader {
         let (plain, wire) = self.fr.read_frame()?;
         let t = mono_us();
         self.batch.clear();
+        // A frame of tiny messages can decode into tens of thousands of entries; do not
+        // keep that much memory for the rest of the connection.
+        if self.batch.capacity() > BATCH_KEEP {
+            self.batch = Vec::with_capacity(64);
+        }
         protocol::decode_all(plain, &mut self.batch).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Stats::add(&self.stats.frames_received, 1);
         Stats::add(&self.stats.bytes_received, wire as u64);
@@ -496,6 +523,36 @@ pub(crate) struct AuthCtx<'a> {
     pub my_role: PeerRole,
     pub my_name: &'a str,
     pub code: String,
+    /// Disarmed once the peer's `Hello` arrived.
+    pub deadline: Option<&'a SetupDeadline>,
+    /// Called after a valid `Hello` with whether a pairing prompt is needed; returning
+    /// false refuses the connection (too many pairing attempts at once).
+    pub on_hello: Option<&'a dyn Fn(bool) -> bool>,
+}
+
+/// Closes a connection that has not finished its setup by a deadline, so a peer that
+/// drips bytes slowly cannot hold one of the few pending-handshake slots for long.
+pub(crate) struct SetupDeadline {
+    disarm: Mutex<Option<mpsc::Sender<()>>>,
+}
+
+impl SetupDeadline {
+    pub(crate) fn arm(stream: &TcpStream, after: Duration) -> io::Result<Self> {
+        let sock = stream.try_clone()?;
+        let (tx, rx) = mpsc::channel::<()>();
+        thread::Builder::new().name("setup-deadline".into()).spawn(move || {
+            // Disarming (or dropping the guard) disconnects the channel.
+            if let Err(RecvTimeoutError::Timeout) = rx.recv_timeout(after) {
+                log::warn!("connection setup took longer than {} s; closing it", after.as_secs());
+                let _ = sock.shutdown(Shutdown::Both);
+            }
+        })?;
+        Ok(Self { disarm: Mutex::new(Some(tx)) })
+    }
+
+    pub(crate) fn disarm(&self) {
+        self.disarm.lock().unwrap().take();
+    }
 }
 
 #[derive(Debug)]
@@ -566,6 +623,16 @@ pub(crate) fn hello_and_authorize(
         return Err(AuthError::Incompatible(msg));
     }
     let peer = PeerInfo { public: ch_remote, id: device_id(&ch_remote), name, addr };
+    if let Some(d) = ctx.deadline {
+        d.disarm();
+    }
+    if let Some(admit) = ctx.on_hello
+        && !admit(!(i_trust && peer_trusts))
+    {
+        let msg = "the other computer is busy pairing; try again in a minute".to_owned();
+        bye(&w, &msg);
+        return Err(AuthError::Incompatible(msg));
+    }
 
     // Pairing UI is needed on both screens unless both sides already trust each other.
     let mut ticket = None;
@@ -630,7 +697,17 @@ pub(crate) fn hello_and_authorize(
     let mut newly_paired = false;
     if let Some((tid, handle)) = decision {
         let (d, t) = match peer_result {
-            Ok(()) => handle.join().map_err(|_| AuthError::RejectedLocally)?,
+            Ok(()) => {
+                // The peer approved; our user may take up to PAIRING_TIMEOUT. Keep watching
+                // the socket meanwhile, so a peer that leaves withdraws its prompt (and
+                // frees its pairing slot) at once instead of after the timeout.
+                if !wait_while_connected(r.stream(), &handle) {
+                    ctx.broker.cancel(&tid);
+                    let _ = handle.join();
+                    return Err(AuthError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, "the other computer left")));
+                }
+                handle.join().map_err(|_| AuthError::RejectedLocally)?
+            }
             Err(e) => {
                 // The peer gave up: withdraw the prompt so the helper thread returns.
                 ctx.broker.cancel(&tid);
@@ -651,4 +728,146 @@ pub(crate) fn hello_and_authorize(
     r.stream().set_read_timeout(None)?;
     let w = Arc::try_unwrap(w).map_err(|_| AuthError::Incompatible("writer still shared".into()))?;
     Ok((peer, w.into_inner().unwrap(), newly_paired))
+}
+
+/// Waits for `handle` to finish while checking that the peer is still connected (without
+/// consuming its data). Returns false as soon as the peer closed the connection.
+fn wait_while_connected<T>(stream: &TcpStream, handle: &thread::JoinHandle<T>) -> bool {
+    let restore = stream.read_timeout().ok().flatten();
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+    let mut alive = true;
+    while !handle.is_finished() {
+        match stream.peek(&mut [0u8; 1]) {
+            Ok(0) => {
+                alive = false;
+                break;
+            }
+            // Data is waiting (the peer is not allowed to send more before our decision,
+            // so it stays unread): just keep polling at the timeout's pace.
+            Ok(_) => thread::sleep(Duration::from_millis(250)),
+            Err(e) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {}
+            Err(_) => {
+                alive = false;
+                break;
+            }
+        }
+    }
+    let _ = stream.set_read_timeout(restore);
+    alive
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::{handshake, Identity};
+    use crate::protocol::MAX_FEATURE_BODY;
+    use std::net::{Ipv4Addr, TcpListener};
+
+    /// A connected, encrypted reader/writer pair over loopback TCP.
+    fn channel_pair() -> (MsgWriter, MsgReader, Arc<Stats>, Arc<Stats>) {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let ch = handshake(&mut s, &Identity::generate().unwrap(), false).unwrap();
+            let stats = Arc::new(Stats::new());
+            let (r, _w) = split_channel(ch, &s, &stats).unwrap();
+            (r, stats, s)
+        });
+        let mut c = TcpStream::connect(addr).unwrap();
+        let ch = handshake(&mut c, &Identity::generate().unwrap(), true).unwrap();
+        let wstats = Arc::new(Stats::new());
+        let (_r, w) = split_channel(ch, &c, &wstats).unwrap();
+        let (r, rstats, s) = server.join().unwrap();
+        // Keep both sockets open for the test's lifetime.
+        std::mem::forget((c, s));
+        (w, r, wstats, rstats)
+    }
+
+    #[test]
+    fn writer_splits_batches_at_message_boundaries() {
+        let (mut w, mut r, wstats, rstats) = channel_pair();
+        // Many large feature bodies of varying sizes mixed with input: far more than one
+        // frame, and sizes chosen so messages would straddle frame boundaries if the
+        // writer split by bytes instead of by message.
+        let mut msgs = Vec::new();
+        for i in 0..40usize {
+            let len = [MAX_FEATURE_BODY, MAX_FEATURE_BODY - 5, 1, 0, 30_000, 17_001][i % 6];
+            msgs.push(Message::Feature { channel: 1 + (i % 3) as u8, body: vec![i as u8; len] });
+            msgs.push(Message::MouseMove { x: i as i32, y: -(i as i32) });
+            if i % 7 == 0 {
+                msgs.push(Message::Bye { reason: "é".repeat(200) });
+            }
+        }
+        let total: usize = msgs.iter().map(protocol::encoded_len).sum();
+        let writer = thread::spawn(move || {
+            w.send(&msgs).unwrap();
+            (w, msgs)
+        });
+        let mut got = Vec::new();
+        let mut frames = 0u64;
+        let (_w, sent) = loop {
+            let (batch, _) = r.read_batch().expect("every frame decodes on its own");
+            frames += 1;
+            got.extend_from_slice(batch);
+            if got.len() >= 40 * 2 + 6 {
+                break writer.join().unwrap();
+            }
+        };
+        // Strings are truncated on the wire; compare everything else exactly.
+        assert_eq!(got.len(), sent.len());
+        for (a, b) in got.iter().zip(&sent) {
+            match (a, b) {
+                (Message::Bye { reason: x }, Message::Bye { reason: y }) => assert!(y.starts_with(x.as_str())),
+                _ => assert_eq!(a, b),
+            }
+        }
+        assert!(frames as usize >= total / MAX_FRAME_PLAINTEXT, "{frames} frames for {total} bytes");
+        assert_eq!(Stats::get(&wstats.frames_sent), frames);
+        assert_eq!(Stats::get(&rstats.frames_received), frames);
+    }
+
+    #[test]
+    fn reader_does_not_keep_huge_batches() {
+        let (mut w, mut r, _, _) = channel_pair();
+        // One frame with ~65 000 one-byte messages (our writer never packs that densely,
+        // a hostile peer can), then a normal one.
+        let mut flood = Vec::new();
+        for _ in 0..MAX_FRAME_PLAINTEXT - 16 {
+            protocol::encode(&Message::ReleaseAll, &mut flood);
+        }
+        let t = thread::spawn(move || {
+            w.fw.write_frame(&flood).unwrap();
+            w.send(&[Message::Leave]).unwrap();
+            w
+        });
+        let (b, _) = r.read_batch().unwrap();
+        assert_eq!(b.len(), MAX_FRAME_PLAINTEXT - 16);
+        let (b, _) = r.read_batch().unwrap();
+        assert_eq!(b, &[Message::Leave]);
+        assert!(r.batch.capacity() <= BATCH_KEEP, "large batch buffer released");
+        t.join().unwrap();
+    }
+
+    #[test]
+    fn bulk_gate_bounds_queue_and_wakes_on_leave_and_close() {
+        let gate = Arc::new(BulkGate::default());
+        for _ in 0..MAX_BULK_QUEUED {
+            assert!(gate.enter(None));
+        }
+        assert!(!gate.enter(None), "never-blocking enter fails when full");
+        assert!(!gate.enter(Some(Duration::from_millis(20))), "timed enter times out");
+        // A huge timeout is "wait as long as needed", not an overflow panic.
+        let g = gate.clone();
+        let waiter = thread::spawn(move || g.enter(Some(Duration::MAX)));
+        thread::sleep(Duration::from_millis(20));
+        gate.leave();
+        assert!(waiter.join().unwrap(), "leave wakes a waiter");
+        let g = gate.clone();
+        let waiter = thread::spawn(move || g.enter(Some(Duration::from_secs(30))));
+        thread::sleep(Duration::from_millis(20));
+        gate.close();
+        assert!(!waiter.join().unwrap(), "close wakes waiters with failure");
+        assert!(!gate.enter(None));
+    }
 }
