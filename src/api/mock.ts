@@ -37,6 +37,7 @@ import type {
   TrustedDevice,
 } from "./types";
 import { boundsOf, touchesAny } from "../lib/layoutGeometry";
+import { parseShortcut } from "../lib/shortcuts";
 
 type Api = typeof realApi;
 
@@ -146,7 +147,8 @@ function validateSettings(next: Settings): Settings {
   const deviceName = next.deviceName.trim().slice(0, 64);
   if (!deviceName) fail("Device name can't be empty");
   const k = next.keyboard;
-  const shortcuts = k.localShortcuts.map((s) => s.trim()).filter((s) => s && s.length <= 64);
+  // Like keys.rs: normalise, drop entries that don't parse, remove duplicates.
+  const shortcuts = [...new Set(k.localShortcuts.map((s) => parseShortcut(s)).flatMap((r) => (r.ok ? [r.value] : [])))];
   return {
     ...next,
     deviceName,

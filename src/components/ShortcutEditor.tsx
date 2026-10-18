@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { cx } from "../lib/cx";
-import { MAX_LOCAL_SHORTCUTS, parseShortcut, SHORTCUT_SUGGESTIONS, shortcutKeys, validateNewShortcut } from "../lib/shortcuts";
+import { MAX_LOCAL_SHORTCUTS, parseShortcut, SHORTCUT_SUGGESTIONS, shortcutKeys, shortcutNote, validateNewShortcut } from "../lib/shortcuts";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { TextBox } from "./TextBox";
@@ -96,10 +96,11 @@ export function ShortcutEditor({ value, onChange, disabled = false, labelledBy }
       </form>
       <p id={messageId} className={cx("shortcut-message", check && (check.ok ? "is-ok" : attempted ? "is-error" : "is-hint"))} aria-live="polite">
         {check === null ? (
-          `${value.length} of ${MAX_LOCAL_SHORTCUTS} · Modifiers: Ctrl, Alt, Shift, Win. Keys: A–Z, 0–9, F1–F24, Esc, Tab, Delete, PrintScreen…`
+          `${value.length} of ${MAX_LOCAL_SHORTCUTS} · Modifiers: Ctrl, Alt, Shift, Win. Keys: A–Z, 0–9, F1–F24, arrows, Esc, Tab, Space, Enter, Home, End, PgUp, PgDn, Insert, Delete`
         ) : check.ok ? (
           <>
             <Icon name="checkmark" /> Will be added as {check.value}
+            {shortcutNote(check.value) && ` · ${shortcutNote(check.value)}`}
           </>
         ) : (
           <>
