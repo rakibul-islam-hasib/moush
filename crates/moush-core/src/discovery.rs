@@ -85,6 +85,34 @@ fn decode(buf: &[u8]) -> Option<Packet> {
     }
 }
 
+/// Token bucket for discovery replies: bursts of [`ReplyLimit::BURST`], refilled at
+/// [`ReplyLimit::PER_SEC`]. A client scan sends one probe per interface, far below this.
+struct ReplyLimit {
+    tokens: f64,
+    last: Instant,
+}
+
+impl ReplyLimit {
+    const BURST: f64 = 32.0;
+    const PER_SEC: f64 = 16.0;
+
+    fn new() -> Self {
+        Self { tokens: Self::BURST, last: Instant::now() }
+    }
+
+    fn allow(&mut self, now: Instant) -> bool {
+        let dt = now.saturating_duration_since(self.last).as_secs_f64();
+        self.last = now;
+        self.tokens = (self.tokens + dt * Self::PER_SEC).min(Self::BURST);
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Answers discovery probes until stopped.
 pub struct Responder {
     stop: Arc<AtomicBool>,
@@ -108,6 +136,7 @@ impl Responder {
         let stop2 = stop.clone();
         let thread = thread::Builder::new().name("discovery".into()).spawn(move || {
             let mut buf = [0u8; 512];
+            let mut limit = ReplyLimit::new();
             loop {
                 let (n, from) = match sock.recv_from(&mut buf) {
                     Ok(v) => v,
@@ -119,7 +148,10 @@ impl Responder {
                     }
                 };
                 match decode(&buf[..n]) {
-                    Some(Packet::Probe) => {
+                    // Probes are unauthenticated and their source can be spoofed; the
+                    // reply is larger than the probe, so cap the reply rate to keep the
+                    // host from being used to flood another machine.
+                    Some(Packet::Probe) if limit.allow(Instant::now()) => {
                         if let Err(e) = sock.send_to(&reply, from) {
                             log::debug!("discovery reply to {from} failed: {e}");
                         }
@@ -237,6 +269,19 @@ pub fn scan_on(wait: Duration, port: u16, targets: &[Ipv4Addr]) -> io::Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reply_rate_is_limited() {
+        let mut l = ReplyLimit::new();
+        let t0 = Instant::now();
+        let burst = (0..1000).filter(|_| l.allow(t0)).count();
+        assert_eq!(burst, ReplyLimit::BURST as usize, "a flood gets at most one burst");
+        assert!(!l.allow(t0));
+        // One second later the bucket has refilled at the steady rate.
+        let t1 = t0 + Duration::from_secs(1);
+        let refill = (0..1000).filter(|_| l.allow(t1)).count();
+        assert_eq!(refill, ReplyLimit::PER_SEC as usize);
+    }
 
     #[test]
     fn packet_roundtrip_and_validation() {

@@ -45,17 +45,21 @@ impl Window {
     /// Blocks until `n` more bytes may be sent. A request larger than the capacity is
     /// granted once nothing else is in flight.
     pub fn acquire(&self, n: usize, timeout: Duration) -> Acquire {
-        let deadline = Instant::now() + timeout;
+        // A huge timeout means "no deadline" rather than an overflow panic.
+        let deadline = Instant::now().checked_add(timeout);
         let mut s = self.state.lock().unwrap();
         loop {
             if s.closed {
                 return Acquire::Closed;
             }
-            if s.in_flight == 0 || s.in_flight + n <= self.capacity {
-                s.in_flight += n;
+            if s.in_flight == 0 || s.in_flight.saturating_add(n) <= self.capacity {
+                s.in_flight = s.in_flight.saturating_add(n);
                 return Acquire::Ok;
             }
-            let left = deadline.saturating_duration_since(Instant::now());
+            let left = match deadline {
+                Some(d) => d.saturating_duration_since(Instant::now()),
+                None => Duration::from_secs(3600),
+            };
             if left.is_zero() {
                 return Acquire::TimedOut;
             }
@@ -63,7 +67,9 @@ impl Window {
         }
     }
 
-    /// The receiver acknowledged `n` bytes.
+    /// The receiver acknowledged `n` bytes. Acknowledgements come from the peer: callers
+    /// should clamp `n` to what they actually sent (an over-acknowledgement only empties
+    /// the window, it never underflows).
     pub fn release(&self, n: usize) {
         let mut s = self.state.lock().unwrap();
         s.in_flight = s.in_flight.saturating_sub(n);
@@ -102,6 +108,26 @@ mod tests {
         let w = Window::new(10);
         assert_eq!(w.acquire(50, Duration::ZERO), Acquire::Ok);
         assert_eq!(w.acquire(1, Duration::ZERO), Acquire::TimedOut);
+    }
+
+    #[test]
+    fn hostile_acks_and_extreme_arguments_are_safe() {
+        let w = Arc::new(Window::new(100));
+        assert_eq!(w.acquire(usize::MAX, Duration::ZERO), Acquire::Ok, "oversized request on an empty window");
+        assert_eq!(w.acquire(1, Duration::ZERO), Acquire::TimedOut, "no overflow back to a small number");
+        // A peer acknowledging more than was sent only empties the window.
+        w.release(usize::MAX);
+        assert_eq!(w.in_flight(), 0);
+        w.release(5);
+        assert_eq!(w.in_flight(), 0);
+        // `Duration::MAX` waits instead of panicking on the deadline computation.
+        w.acquire(100, Duration::ZERO);
+        let w2 = w.clone();
+        let t = thread::spawn(move || w2.acquire(10, Duration::MAX));
+        thread::sleep(Duration::from_millis(20));
+        w.release(100);
+        assert_eq!(t.join().unwrap(), Acquire::Ok);
+        assert_eq!(Window::new(0).capacity(), 1);
     }
 
     #[test]

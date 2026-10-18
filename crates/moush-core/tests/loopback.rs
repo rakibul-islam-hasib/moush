@@ -343,7 +343,15 @@ fn feature_traffic_flows_both_ways_without_starving_input() {
     let fe = Arc::new(FeatureEvents { sender: Mutex::new(None), features: Mutex::new(ftx), caps: Mutex::new(ctx) });
     let (events, session) = start_client_with(&rig, stop.clone(), link.clone(), fe.clone());
     let client = rig.connected.recv_timeout(Duration::from_secs(10)).unwrap();
-    let to_host = fe.sender.lock().unwrap().clone().expect("client sender");
+    // The host can see the connection before the client thread reports it.
+    let waited = Instant::now();
+    let to_host = loop {
+        if let Some(s) = fe.sender.lock().unwrap().clone() {
+            break s;
+        }
+        assert!(waited.elapsed() < Duration::from_secs(5), "client sender");
+        thread::sleep(Duration::from_millis(2));
+    };
 
     // Capabilities in both directions.
     assert!(client.sender.send_control(Message::Capabilities { features: 0b11 }));
