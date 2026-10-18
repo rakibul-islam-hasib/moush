@@ -265,7 +265,7 @@ fn cmd_client(args: &Args) -> Result<(), String> {
     let stats = Arc::new(Stats::new());
     let engine = ClientEngine::start(
         target,
-        ClientOptions { name: system::computer_name(), default_port: args.port, auto_reconnect: true, dry_run: args.dry_run },
+        ClientOptions { name: system::computer_name(), default_port: args.port, auto_reconnect: true, dry_run: args.dry_run, focus_on_enter: false },
         id,
         trust,
         stdin_broker(),

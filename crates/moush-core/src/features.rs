@@ -104,9 +104,16 @@ impl Default for KeyboardSettings {
 }
 
 impl KeyboardSettings {
+    /// Keeps only local shortcuts that parse (see [`crate::keys::parse_shortcut`]), in
+    /// canonical form ("ctrl+shift+esc" becomes "Ctrl+Shift+Esc"), without duplicates, at
+    /// most 16. Invalid entries are dropped with a log line.
     pub fn validated(mut self) -> Self {
-        self.local_shortcuts.retain(|s| !s.trim().is_empty() && s.len() <= 64);
-        self.local_shortcuts.truncate(16);
+        let entries: Vec<String> = self.local_shortcuts.iter().filter(|s| s.len() <= 64).cloned().collect();
+        let (set, errors) = crate::keys::ShortcutSet::parse(&entries);
+        for e in errors {
+            log::warn!("local shortcut ignored: {e}");
+        }
+        self.local_shortcuts = set.as_slice().iter().map(|s| s.to_string()).collect();
         if !matches!(self.edge_switch_modifier.as_str(), "none" | "ctrl" | "shift" | "alt") {
             self.edge_switch_modifier = "none".into();
         }
@@ -227,6 +234,12 @@ mod tests {
             .validated();
         assert_eq!(k.edge_switch_modifier, "none");
         assert!(k.local_shortcuts.is_empty());
+        let k = KeyboardSettings {
+            local_shortcuts: vec!["ctrl+shift+esc".into(), "Ctrl + Shift + Esc".into(), "Hyper+Q".into(), "Win+L".into()],
+            ..Default::default()
+        }
+        .validated();
+        assert_eq!(k.local_shortcuts, vec!["Ctrl+Shift+Esc".to_owned(), "Win+L".to_owned()]);
         let t = TransferSettings { overwrite: "x".into(), speed: "ludicrous".into(), ..Default::default() }.validated();
         assert_eq!((t.overwrite.as_str(), t.speed.as_str()), ("rename", "balanced"));
     }

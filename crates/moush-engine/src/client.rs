@@ -23,6 +23,7 @@ use crate::features::FeatureHub;
 use crate::host::Notify;
 use crate::win::display_watch::DisplayWatcher;
 use crate::win::dpi::make_thread_dpi_aware;
+use crate::win::focus::FocusWorker;
 use crate::win::inject::SendInputInjector;
 use crate::win::monitors;
 
@@ -65,6 +66,9 @@ pub struct ClientOptions {
     pub auto_reconnect: bool,
     /// Log input instead of injecting it (testing on one machine).
     pub dry_run: bool,
+    /// When the shared cursor enters, bring the window under it to the front.
+    /// Can be changed while running with [`ClientEngine::set_focus_on_enter`].
+    pub focus_on_enter: bool,
 }
 
 struct Shared {
@@ -78,6 +82,9 @@ struct Shared {
     /// (host id, connection number) of the current session, for the feature hub.
     session: Mutex<Option<(String, u64)>>,
     sessions: std::sync::atomic::AtomicU64,
+    focus_on_enter: AtomicBool,
+    /// None in dry-run mode (nothing is injected, so nothing is focused either).
+    focus: Option<FocusWorker>,
 }
 
 impl Shared {
@@ -109,6 +116,12 @@ impl ClientEvents for Shared {
 
     fn active_changed(&self, active: bool) {
         log::info!("{}", if active { "shared cursor entered this computer" } else { "shared cursor left this computer" });
+        if active
+            && self.focus_on_enter.load(Ordering::Relaxed)
+            && let Some(f) = &self.focus
+        {
+            f.request(); // never blocks: the work happens on the focus thread
+        }
         self.update(|v| v.active = active);
     }
 
@@ -178,6 +191,18 @@ impl ClientEngine {
             hub,
             session: Mutex::new(None),
             sessions: std::sync::atomic::AtomicU64::new(0),
+            focus_on_enter: AtomicBool::new(opts.focus_on_enter),
+            focus: if opts.dry_run {
+                None
+            } else {
+                match FocusWorker::start() {
+                    Ok(f) => Some(f),
+                    Err(e) => {
+                        log::warn!("focus on enter unavailable: {e}");
+                        None
+                    }
+                }
+            },
         });
         let link = ClientLink::new();
         let stop = Arc::new(AtomicBool::new(false));
@@ -211,6 +236,11 @@ impl ClientEngine {
 
     pub fn rtt_ms(&self) -> Option<f64> {
         self.link.rtt_ms()
+    }
+
+    /// Applies the "focus on enter" option immediately (next time the cursor enters).
+    pub fn set_focus_on_enter(&self, on: bool) {
+        self.shared.focus_on_enter.store(on, Ordering::Relaxed);
     }
 
     /// Cancels a pairing that is waiting for the host (closes the connection attempt).

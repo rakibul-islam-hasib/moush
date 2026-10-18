@@ -309,6 +309,51 @@ impl Layout {
         Step::Stay(c.screen.clamp_nearest(q))
     }
 
+    /// Layout rectangle of a computer (the host's is the bounding box of its monitors).
+    pub fn rect_of(&self, t: Target) -> Option<RectF> {
+        match t {
+            Target::Host => Some(RectF::from_rect(&self.host.bbox())),
+            Target::Client(i) => self.clients.get(i).map(|c| c.layout_rect()),
+        }
+    }
+
+    /// The computer next to `from` in direction `dir`, for keyboard switching.
+    ///
+    /// Computers lying beyond `from`'s edge in that direction (within the touch tolerance)
+    /// come first; among them, one that overlaps `from` across the direction wins over a
+    /// diagonal one, then the smallest gap wins. If nothing lies fully beyond the edge, a
+    /// computer whose centre is mostly in that direction is accepted.
+    pub fn neighbor(&self, from: Target, dir: Edge) -> Option<Target> {
+        let a = self.rect_of(from)?;
+        let (acx, acy) = (a.x + a.w / 2.0, a.y + a.h / 2.0);
+        std::iter::once(Target::Host)
+            .chain((0..self.clients.len()).map(Target::Client))
+            .filter(|t| *t != from)
+            .filter_map(|t| {
+                let b = self.rect_of(t)?;
+                let (bcx, bcy) = (b.x + b.w / 2.0, b.y + b.h / 2.0);
+                let sy = span_gap(a.y, a.bottom(), b.y, b.bottom());
+                let sx = span_gap(a.x, a.right(), b.x, b.right());
+                // (gap beyond the edge, offset across, centre offset along, centre offset across, extends past the edge)
+                let (gap, perp, along_c, perp_c, beyond) = match dir {
+                    Edge::Left => (a.x - b.right(), sy, acx - bcx, acy - bcy, b.x < a.x),
+                    Edge::Right => (b.x - a.right(), sy, bcx - acx, acy - bcy, b.right() > a.right()),
+                    Edge::Top => (a.y - b.bottom(), sx, acy - bcy, acx - bcx, b.y < a.y),
+                    Edge::Bottom => (b.y - a.bottom(), sx, bcy - acy, acx - bcx, b.bottom() > a.bottom()),
+                };
+                let tier = if gap >= -TOUCH_TOLERANCE {
+                    0
+                } else if beyond && along_c > 0.0 && along_c >= perp_c.abs() {
+                    1
+                } else {
+                    return None;
+                };
+                Some((t, tier, perp, gap.max(0.0)))
+            })
+            .min_by(|x, y| (x.1, x.2, x.3).partial_cmp(&(y.1, y.2, y.3)).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(t, ..)| t)
+    }
+
     /// Finds the host monitor reached by leaving through `edge` at layout point (lx, ly).
     /// The entry point is placed one pixel inside the monitor edge, so the cursor does not
     /// bounce straight back.
@@ -369,6 +414,11 @@ impl Layout {
             Some((i, c.screen.clamp_nearest(p)))
         })
     }
+}
+
+/// Distance between the intervals [a0, a1) and [b0, b1); 0 when they overlap.
+fn span_gap(a0: f64, a1: f64, b0: f64, b1: f64) -> f64 {
+    (b0 - a1).max(a0 - b1).max(0.0)
 }
 
 /// Edges of `m` that `p` lies on.
@@ -535,6 +585,50 @@ mod tests {
         let Step::Cross(c) = l.client_step(0, Point::new(0, 100), -1, 0, 0) else { panic!() };
         assert_eq!(c.to, Target::Client(1));
         assert_eq!(c.point.x, 999);
+    }
+
+    #[test]
+    fn keyboard_neighbours_follow_the_layout() {
+        // [ tablet ] [ laptop ] [ Monitor 1 ] [ Monitor 2 ], plus a TV above monitor 2.
+        let mut l = desk();
+        l.clients.push(ClientPlacement {
+            id: "tablet".into(),
+            screen: Screen::new(vec![Rect::new(0, 0, 1000, 800)]),
+            origin_x: -2280.0,
+            origin_y: 320.0,
+            scale: 1.0,
+        });
+        l.clients.push(ClientPlacement {
+            id: "tv".into(),
+            screen: Screen::new(vec![Rect::new(0, 0, 1920, 1080)]),
+            origin_x: 2900.0,
+            origin_y: -1080.0,
+            scale: 1.0,
+        });
+        assert_eq!(l.neighbor(Target::Host, Edge::Left), Some(Target::Client(0)));
+        assert_eq!(l.neighbor(Target::Client(0), Edge::Left), Some(Target::Client(1)), "client to client");
+        assert_eq!(l.neighbor(Target::Client(1), Edge::Right), Some(Target::Client(0)));
+        assert_eq!(l.neighbor(Target::Client(0), Edge::Right), Some(Target::Host), "client to host");
+        assert_eq!(l.neighbor(Target::Host, Edge::Top), Some(Target::Client(2)));
+        assert_eq!(l.neighbor(Target::Client(2), Edge::Bottom), Some(Target::Host));
+        assert_eq!(l.neighbor(Target::Host, Edge::Right), None);
+        assert_eq!(l.neighbor(Target::Client(1), Edge::Left), None);
+        assert_eq!(l.neighbor(Target::Client(9), Edge::Left), None);
+    }
+
+    #[test]
+    fn keyboard_neighbour_prefers_overlap_over_diagonal() {
+        let mut l = desk();
+        // A second client far left but level with the host, and the laptop moved up-left diagonally.
+        l.clients[0].origin_y = -1000.0;
+        l.clients.push(ClientPlacement {
+            id: "far".into(),
+            screen: Screen::new(vec![Rect::new(0, 0, 1000, 800)]),
+            origin_x: -4000.0,
+            origin_y: 200.0,
+            scale: 1.0,
+        });
+        assert_eq!(l.neighbor(Target::Host, Edge::Left), Some(Target::Client(1)));
     }
 
     #[test]

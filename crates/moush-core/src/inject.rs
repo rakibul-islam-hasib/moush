@@ -103,6 +103,13 @@ impl<I: Injector> InjectState<I> {
         // Release non-modifiers first so that e.g. Ctrl+C does not turn into a bare C.
         let mut held: Vec<(u16, (u16, bool))> = self.keys.drain().collect();
         held.sort_by_key(|(vk, _)| (keys::is_modifier(*vk), *vk));
+        // Releasing a Win (or Alt) whose press saw no other key would open the Start menu
+        // (or activate a menu bar) here, although the user was switching away. Tap the
+        // unassigned mask key first so the shell sees a combination instead.
+        if held.iter().any(|(vk, _)| keys::is_menu_modifier(*vk)) {
+            count(self.inj.key(keys::VK_MASK, 0, false, true, true));
+            count(self.inj.key(keys::VK_MASK, 0, false, false, true));
+        }
         for (vk, (scan, ext)) in held {
             count(self.inj.key(vk, scan, ext, false, keys::inject_by_vk(vk, scan)));
         }
@@ -189,6 +196,25 @@ pub(crate) mod tests {
         rec.0.lock().unwrap().clear();
         s.apply(&Message::ReleaseAll);
         assert!(rec.0.lock().unwrap().is_empty(), "nothing left to release");
+    }
+
+    #[test]
+    fn releasing_win_on_leave_is_masked_so_start_does_not_open() {
+        let rec = Recorder::default();
+        let mut s = InjectState::new(rec.clone());
+        s.apply(&Message::Enter { x: 0, y: 0 });
+        s.apply(&Message::Key { vk: keys::VK_LWIN, scan: 0x5b, flags: key_flags::DOWN | key_flags::EXTENDED });
+        rec.0.lock().unwrap().clear();
+        s.apply(&Message::Leave);
+        assert_eq!(
+            *rec.0.lock().unwrap(),
+            vec![Ev::Key(keys::VK_MASK, true, true), Ev::Key(keys::VK_MASK, false, true), Ev::Key(keys::VK_LWIN, false, false)]
+        );
+        // A forwarded mask key (host-side shortcut hand-over) is injected by virtual key.
+        s.apply(&Message::Enter { x: 0, y: 0 });
+        rec.0.lock().unwrap().clear();
+        s.apply(&Message::Key { vk: keys::VK_MASK, scan: 0, flags: key_flags::DOWN });
+        assert_eq!(*rec.0.lock().unwrap(), vec![Ev::Key(keys::VK_MASK, true, true)]);
     }
 
     #[test]
