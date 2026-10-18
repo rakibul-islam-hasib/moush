@@ -1,0 +1,21 @@
+[package]
+name = "moush"
+description = "Share one mouse and keyboard between computers on your network"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "Moush"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+moush-engine.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2.12", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.5"

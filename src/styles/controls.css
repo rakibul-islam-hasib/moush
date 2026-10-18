@@ -1,0 +1,638 @@
+/* ---------------------------------------------------------------- Button */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 11px 6px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--control-stroke-bottom);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  background-clip: padding-box;
+  color: var(--text);
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color var(--dur-fast) linear, color var(--dur-fast) linear;
+}
+
+.btn .icon {
+  flex: none;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: var(--control-hover);
+}
+
+.btn:active:not(:disabled) {
+  background-color: var(--control-pressed);
+  border-bottom-color: var(--control-stroke);
+  color: var(--text-secondary);
+}
+
+.btn:disabled {
+  background-color: var(--control-disabled);
+  border-color: var(--control-stroke);
+  color: var(--text-disabled);
+}
+
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent-stroke);
+  border-bottom-color: var(--accent-stroke-bottom);
+  color: var(--on-accent);
+}
+
+.btn-accent:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.btn-accent:active:not(:disabled) {
+  background-color: var(--accent-pressed);
+  border-bottom-color: var(--accent-stroke);
+  color: var(--on-accent-secondary);
+}
+
+.btn-accent:disabled {
+  background-color: var(--accent-disabled);
+  border-color: transparent;
+  color: var(--on-accent-disabled);
+}
+
+.btn-subtle {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-subtle:hover:not(:disabled) {
+  background-color: var(--subtle-hover);
+}
+
+.btn-subtle:active:not(:disabled) {
+  background-color: var(--subtle-pressed);
+  border-color: transparent;
+}
+
+.btn-subtle:disabled {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-icon {
+  width: 32px;
+  padding: 0;
+}
+
+.btn .progress-ring circle {
+  stroke: currentColor;
+}
+
+/* ---------------------------------------------------------------- ToggleSwitch */
+
+.toggle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-state {
+  min-width: 22px;
+  text-align: right;
+}
+
+.toggle {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--control-strong-stroke);
+  border-radius: 10px;
+  background: var(--control-alt);
+  cursor: default;
+  transition: background-color var(--dur-fast) linear, border-color var(--dur-fast) linear;
+}
+
+.toggle:hover:not(:disabled) {
+  background: var(--control-alt-hover);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 1px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform var(--dur) var(--ease), width var(--dur-fast), height var(--dur-fast), margin var(--dur-fast);
+}
+
+.toggle:hover:not(:disabled) .toggle-knob {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 0;
+}
+
+.toggle:active:not(:disabled) .toggle-knob {
+  width: 17px;
+  height: 14px;
+  margin: -7px 0 0 0;
+}
+
+.toggle[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.toggle[aria-checked="true"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.toggle[aria-checked="true"] .toggle-knob {
+  background: var(--on-accent);
+  transform: translateX(18px);
+}
+
+.toggle[aria-checked="true"]:active:not(:disabled) .toggle-knob {
+  transform: translateX(15px);
+}
+
+.toggle:disabled {
+  border-color: var(--text-disabled);
+}
+
+.toggle:disabled .toggle-knob {
+  background: var(--text-disabled);
+}
+
+.toggle[aria-checked="true"]:disabled {
+  background: var(--accent-disabled);
+  border-color: transparent;
+}
+
+/* ---------------------------------------------------------------- TextBox */
+
+.textbox {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 10px 6px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--control-strong-stroke);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  line-height: 20px;
+  transition: background-color var(--dur-fast) linear;
+}
+
+.textbox::placeholder {
+  color: var(--text-secondary);
+}
+
+.textbox:hover {
+  background: var(--control-hover);
+}
+
+.textbox:focus,
+.textbox:focus-visible {
+  outline: none;
+  background: var(--control-input-active);
+  border-bottom-color: var(--accent);
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+
+.textbox[aria-invalid="true"] {
+  border-bottom-color: var(--critical);
+  box-shadow: inset 0 -1px 0 var(--critical);
+}
+
+.textbox-small {
+  width: 120px;
+}
+
+.textbox-medium {
+  width: 240px;
+}
+
+.field-error {
+  margin: 8px 0 0 36px;
+  color: var(--critical);
+  font-size: var(--fs-caption);
+  line-height: 16px;
+}
+
+/* ---------------------------------------------------------------- Slider */
+
+.slider-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider-value {
+  min-width: 56px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.slider {
+  --pct: 50%;
+  width: 200px;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.slider:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--radius-control);
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--pct), var(--control-strong-fill) var(--pct));
+}
+
+.slider::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border: 5px solid var(--control-solid);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--control-stroke);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-width var(--dur-fast) var(--ease);
+}
+
+.slider:hover::-webkit-slider-thumb {
+  border-width: 4px;
+}
+
+.slider:active::-webkit-slider-thumb {
+  border-width: 6px;
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--control-strong-fill);
+}
+
+.slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 5px solid var(--control-solid);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--control-stroke);
+}
+
+/* ---------------------------------------------------------------- Select (ComboBox) */
+
+.select-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 180px;
+}
+
+.select {
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 34px 6px 11px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--control-stroke-bottom);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  line-height: 20px;
+  cursor: default;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background-color var(--dur-fast) linear;
+}
+
+.select:hover {
+  background: var(--control-hover);
+}
+
+.select:active {
+  background: var(--control-pressed);
+}
+
+.select option {
+  background: var(--flyout-bg);
+  color: var(--text);
+}
+
+.select-chevron {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- InfoBar */
+
+.infobar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 8px 13px 16px;
+  border: 1px solid var(--card-stroke);
+  border-radius: var(--radius-control);
+  background: var(--attention-bg);
+}
+
+.infobar-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.infobar-success {
+  background: var(--success-bg);
+}
+
+.infobar-success .infobar-icon {
+  color: var(--success);
+}
+
+.infobar-warning {
+  background: var(--caution-bg);
+}
+
+.infobar-warning .infobar-icon {
+  color: var(--caution);
+}
+
+.infobar-error {
+  background: var(--critical-bg);
+}
+
+.infobar-error .infobar-icon {
+  color: var(--critical);
+}
+
+.infobar-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding-right: 8px;
+}
+
+.infobar-title {
+  font-weight: 600;
+}
+
+.infobar-message {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.infobar-action {
+  flex-basis: 100%;
+  margin-top: 4px;
+}
+
+.infobar-close {
+  flex: none;
+  margin: -6px 0;
+}
+
+/* ---------------------------------------------------------------- ProgressRing */
+
+.progress-ring {
+  flex: none;
+  animation: ring-rotate 2s linear infinite;
+}
+
+.progress-ring circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 1 44;
+  animation: ring-dash 1.5s ease-in-out infinite;
+}
+
+@keyframes ring-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ring-dash {
+  0% {
+    stroke-dasharray: 1 44;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 30 44;
+    stroke-dashoffset: -8;
+  }
+  100% {
+    stroke-dasharray: 1 44;
+    stroke-dashoffset: -43;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-ring {
+    animation-duration: 3s;
+  }
+
+  .progress-ring circle {
+    animation: none;
+    stroke-dasharray: 26 44;
+  }
+}
+
+/* ---------------------------------------------------------------- Badge & status dot */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--subtle-hover);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.badge-accent {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+.badge-success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.badge-caution {
+  background: var(--caution-bg);
+  color: var(--caution);
+}
+
+.badge-critical {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--neutral);
+}
+
+.status-dot-accent {
+  background: var(--accent);
+}
+
+.status-dot-success {
+  background: var(--success);
+}
+
+.status-dot-caution {
+  background: var(--caution);
+}
+
+.status-dot-critical {
+  background: var(--critical);
+}
+
+/* ---------------------------------------------------------------- Dialog */
+
+.dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 1px solid var(--surface-stroke);
+  border-radius: var(--radius-card);
+  background: var(--dialog-bg);
+  color: var(--text);
+  box-shadow: var(--shadow-dialog);
+  overflow: auto;
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dialog[open] {
+  animation: dialog-in var(--dur) var(--ease);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[open] {
+    animation: none;
+  }
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+.dialog-body:focus {
+  outline: none;
+}
+
+.dialog-title {
+  font-size: var(--fs-subtitle);
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.dialog-text {
+  color: var(--text);
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  border-top: 1px solid var(--card-stroke);
+  background: var(--dialog-footer);
+}
+
+.dialog-footer > .btn {
+  flex: 1 1 0;
+}
+
+/* ---------------------------------------------------------------- Toasts */
+
+.toast-region {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  border-radius: var(--radius-control);
+  background: var(--flyout-bg);
+  box-shadow: var(--shadow-flyout);
+  pointer-events: auto;
+  animation: toast-in var(--dur) var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

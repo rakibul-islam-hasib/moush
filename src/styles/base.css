@@ -1,0 +1,158 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+html.mica,
+html.mica body {
+  background: transparent;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+strong {
+  font-weight: 600;
+}
+
+input,
+select,
+textarea,
+.mono,
+.log-view {
+  user-select: text;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--control-stroke);
+  border-bottom-color: var(--control-stroke-bottom);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  font-family: var(--font);
+  font-size: var(--fs-caption);
+  line-height: 18px;
+  text-align: center;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--focus-inner);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.caption {
+  font-size: var(--fs-caption);
+  line-height: 16px;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Scrollbars that resemble the thin Windows 11 overlay style. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 6px;
+  background: var(--control-strong-fill) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  border-width: 3px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+}
+
+.splash-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  width: min(480px, 100%);
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

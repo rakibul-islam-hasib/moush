@@ -1,0 +1,170 @@
+.layout-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lc {
+  position: relative;
+  height: clamp(240px, 46vh, 460px);
+  overflow: hidden;
+  border: 1px solid var(--card-stroke);
+  border-radius: var(--radius-card);
+  background: var(--lc-bg);
+  touch-action: none;
+}
+
+.lc svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+
+.lc svg:focus-visible {
+  outline: none;
+}
+
+.lc-label {
+  fill: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.lc-label-strong {
+  font-weight: 600;
+}
+
+.lc-label-secondary {
+  fill: var(--text-secondary);
+}
+
+/* Host monitors (fixed). */
+.lc-mon {
+  fill: var(--lc-host-fill);
+  stroke: var(--control-strong-stroke);
+  stroke-width: 1;
+}
+
+.lc-primary-bar {
+  fill: var(--text-secondary);
+}
+
+/* Client rectangles (draggable). */
+.lc-client {
+  outline: none;
+}
+
+.lc-client.is-movable {
+  cursor: grab;
+}
+
+.lc-client.is-dragging {
+  cursor: grabbing;
+}
+
+.lc-client-frame {
+  fill: var(--accent-subtle);
+  stroke: var(--accent);
+  stroke-width: 1;
+  transition: stroke-width var(--dur-fast) linear;
+}
+
+.lc-client.is-selected .lc-client-frame {
+  stroke-width: 2.5;
+}
+
+.lc-client.is-active .lc-client-frame {
+  fill: var(--accent-subtle);
+  stroke-width: 2.5;
+}
+
+.lc-client-monitor {
+  fill: var(--lc-client-monitor);
+  stroke: var(--accent);
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+}
+
+.lc-client.is-offline {
+  opacity: 0.55;
+}
+
+.lc-client.is-offline .lc-client-frame {
+  stroke: var(--text-tertiary);
+  stroke-dasharray: 4 3;
+  fill: var(--control-alt);
+}
+
+.lc-client.is-offline .lc-client-monitor {
+  stroke: var(--text-tertiary);
+}
+
+.lc-client:focus,
+.lc-client:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.lc-focus {
+  fill: none;
+  stroke: var(--focus-outer);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.lc-warning path:first-child {
+  fill: var(--caution);
+}
+
+.lc-warning-mark {
+  fill: none;
+  stroke: var(--caution-bg);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.lc-edge {
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+/* Legend below the canvas. */
+.layout-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: 16px;
+}
+
+.layout-legend > span:first-child {
+  flex: 1 1 280px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.legend-edge {
+  background: var(--accent);
+}
+
+.legend-offline {
+  height: 12px;
+  border: 1px dashed var(--text-tertiary);
+  background: var(--control-alt);
+}

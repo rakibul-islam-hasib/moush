@@ -1,0 +1,18 @@
+[package]
+name = "moush-cli"
+description = "Headless Moush host/client, benchmark and self-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "moush"
+path = "src/main.rs"
+
+[dependencies]
+moush-engine.workspace = true
+log.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"]
