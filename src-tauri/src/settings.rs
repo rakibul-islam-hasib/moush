@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use moush_engine::core::features::{ClipboardSettings, KeyboardSettings, NotificationSettings, TransferSettings};
 use moush_engine::core::protocol::DEFAULT_PORT;
-use moush_engine::core::router::RouterSettings;
+use moush_engine::core::keys::ShortcutSet;
+use moush_engine::core::router::{EdgeModifier, RouterSettings};
 use moush_engine::core::util::write_atomic;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -123,11 +124,21 @@ impl Settings {
     }
 
     pub fn router(&self) -> RouterSettings {
+        let k = &self.keyboard;
+        let (local_shortcuts, errors) = ShortcutSet::parse(&k.local_shortcuts);
+        for e in errors {
+            log::warn!("local shortcut ignored: {e}");
+        }
         RouterSettings {
             switch_delay_ms: self.switch_delay_ms,
             corner_dead_zone: self.corner_dead_zone_px,
             pointer_speed: self.client_pointer_speed,
             scroll_lock_toggle: self.scroll_lock_toggle,
+            forward_keyboard: k.forward_keyboard,
+            forward_system_shortcuts: k.forward_system_shortcuts,
+            local_shortcuts,
+            switch_hotkeys: k.switch_hotkeys,
+            edge_modifier: EdgeModifier::parse(&k.edge_switch_modifier),
         }
     }
 }
@@ -195,6 +206,24 @@ mod tests {
         assert_eq!(v.client_pointer_speed, 4.0);
         assert!(Settings { device_name: "x".into(), port: 80, ..Default::default() }.validated().is_err());
         assert!(Settings::default().validated().is_err(), "empty name");
+    }
+
+    #[test]
+    fn keyboard_settings_reach_the_router() {
+        let mut s = Settings { device_name: "Desk".into(), ..Default::default() };
+        assert_eq!(s.router(), RouterSettings::default());
+        s.keyboard = KeyboardSettings {
+            forward_keyboard: false,
+            forward_system_shortcuts: false,
+            local_shortcuts: vec!["ctrl+shift+esc".into(), "bogus".into()],
+            switch_hotkeys: false,
+            focus_on_enter: true,
+            edge_switch_modifier: "alt".into(),
+        };
+        let r = s.validated().unwrap().router();
+        assert!(!r.forward_keyboard && !r.forward_system_shortcuts && !r.switch_hotkeys);
+        assert_eq!(r.edge_modifier, EdgeModifier::Alt);
+        assert_eq!(r.local_shortcuts, ShortcutSet::parse(&["Ctrl+Shift+Esc"]).0);
     }
 
     #[test]

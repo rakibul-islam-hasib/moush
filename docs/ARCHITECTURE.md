@@ -47,8 +47,9 @@ and can drop it. They need no special privileges.
   huge jump; deltas larger than a third of the primary monitor are discarded.
 - No switching while a mouse button is held (drag stays on its computer).
 - Keys held while crossing: their release still goes to the computer that saw the press;
-  held modifiers (Shift/Ctrl/Alt/Win) are mirrored to the client so Shift+click across
-  the edge works.
+  held Shift/Ctrl are mirrored to the client so Shift+click across the edge works.
+  Shortcut routing, system shortcuts, switching hotkeys and Win/Alt masking are
+  described in [KEYBOARD.md](KEYBOARD.md).
 - The display is kept awake (`SetThreadExecutionState`) while a client is active, because
   swallowed input does not reset the host's idle timer.
 - When the host session locks (`WTS_SESSION_LOCK`) the cursor comes home first.

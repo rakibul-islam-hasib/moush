@@ -292,6 +292,7 @@ impl App {
                 default_port: c.settings.port,
                 auto_reconnect: true,
                 dry_run: std::env::var_os("MOUSH_DRY_RUN").is_some(),
+                focus_on_enter: c.settings.keyboard.focus_on_enter,
             },
             self.identity.clone(),
             self.trust.clone(),
@@ -393,6 +394,9 @@ impl App {
         let restart_host = new.port != old.settings.port
             || new.discovery_enabled != old.settings.discovery_enabled
             || new.device_name != old.settings.device_name;
+        if let Runtime::Client(cl) = &*self.runtime.lock().unwrap() {
+            cl.set_focus_on_enter(new.keyboard.focus_on_enter);
+        }
         let host_running = matches!(*self.runtime.lock().unwrap(), Runtime::Host(_));
         if host_running {
             if restart_host {
