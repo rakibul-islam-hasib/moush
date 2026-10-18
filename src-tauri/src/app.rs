@@ -23,6 +23,7 @@ use moush_engine::discovered::DiscoveryCache;
 use moush_engine::features::FeatureHub;
 use moush_engine::host::{HostEngine, HostOptions, Notify};
 use moush_engine::paths::AppPaths;
+use moush_engine::transfer::{self as xfer, TransferService};
 use moush_engine::win::monitors::{self, Monitor};
 use moush_engine::win::system::{self, FirewallState, ProcessMonitor};
 
@@ -56,6 +57,8 @@ pub struct App {
     pub hub: Arc<FeatureHub>,
     /// Clipboard sync, history and text sharing (set once in `new`).
     pub clipboard: OnceLock<Arc<ClipboardService>>,
+    /// File transfer with connected peers (registered with `hub`).
+    pub transfers: Arc<TransferService>,
     handle: AppHandle,
 }
 
@@ -87,6 +90,7 @@ impl App {
             notify,
             hub: FeatureHub::new(),
             clipboard: OnceLock::new(),
+            transfers: TransferService::new(xfer::default_download_dir()),
             handle: handle.clone(),
         });
         let weak = Arc::downgrade(&app);
@@ -97,6 +101,16 @@ impl App {
             }
             Err(e) => log::error!("clipboard sync is unavailable: {e}"),
         }
+        let (w1, w2) = (Arc::downgrade(&app), Arc::downgrade(&app));
+        app.transfers.set_handlers(
+            move || w1.upgrade().map(|a| a.config().settings.transfer).unwrap_or_default(),
+            move |e| {
+                if let Some(a) = w2.upgrade() {
+                    crate::transfer_cmds::on_event(&a, e);
+                }
+            },
+        );
+        app.transfers.attach(&app.hub);
         // Emit snapshots from one thread, coalescing bursts of changes.
         let weak = Arc::downgrade(&app);
         thread::Builder::new()
@@ -487,7 +501,7 @@ impl App {
                 })
                 .collect(),
             clipboard: crate::clipboard_cmds::status(self, s.clipboard.enabled),
-            transfers: Vec::new(),
+            transfers: self.transfers.list().into_iter().map(crate::transfer_cmds::view).collect(),
             shared_texts: crate::clipboard_cmds::shared_texts(self),
         }
     }
@@ -706,6 +720,8 @@ fn desc_info(i: usize, m: &MonitorDesc) -> MonitorInfo {
 fn emit_loop(rx: Receiver<()>, app: std::sync::Weak<App>, handle: AppHandle) {
     let mut last_client_state: Option<&'static str> = None;
     let mut prompted: Vec<String> = Vec::new();
+    let mut asked_transfers: Vec<String> = Vec::new();
+    let mut connections = crate::notify::ConnectionWatch::default();
     while rx.recv().is_ok() {
         // Coalesce a burst of changes into one snapshot.
         thread::sleep(Duration::from_millis(25));
@@ -720,9 +736,16 @@ fn emit_loop(rx: Receiver<()>, app: std::sync::Weak<App>, handle: AppHandle) {
         // A pairing prompt must not go unseen while the window sits in the tray.
         let new_prompt = snap.pairing.iter().any(|p| p.needs_my_approval && !prompted.contains(&p.request_id));
         prompted = snap.pairing.iter().map(|p| p.request_id.clone()).collect();
-        if new_prompt {
+        // Likewise for files waiting for approval.
+        let incoming = || snap.features.transfers.iter().filter(|t| t.direction == "receive" && t.state == "pending");
+        let new_transfer = incoming().any(|t| !asked_transfers.contains(&t.id));
+        asked_transfers = incoming().map(|t| t.id.clone()).collect();
+        if new_prompt || new_transfer {
             crate::show_main_window(&handle);
         }
+        let running = snap.host.as_ref().is_some_and(|h| h.running) || snap.client.as_ref().is_some_and(|c| c.state != "idle");
+        let peers = snap.features.peers.iter().map(|p| (p.id.clone(), p.name.clone())).collect();
+        connections.update(&app, peers, running);
         if let Err(e) = handle.emit("snapshot", &snap) {
             log::debug!("snapshot emit failed: {e}");
         }
