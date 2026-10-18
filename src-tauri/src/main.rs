@@ -6,6 +6,7 @@ mod commands;
 mod dto;
 mod notify;
 mod settings;
+mod transfer_cmds;
 mod tray;
 
 use std::sync::Arc;
@@ -55,6 +56,15 @@ fn main() {
             commands::open_firewall_setup,
             commands::open_log_folder,
             commands::quit_app,
+            transfer_cmds::send_files,
+            transfer_cmds::pick_files,
+            transfer_cmds::pick_folder,
+            transfer_cmds::respond_transfer,
+            transfer_cmds::cancel_transfer,
+            transfer_cmds::retry_transfer,
+            transfer_cmds::clear_finished_transfers,
+            transfer_cmds::open_transfer_location,
+            transfer_cmds::default_download_dir,
         ])
         .setup(move |tauri_app| {
             let handle = tauri_app.handle().clone();
