@@ -121,6 +121,33 @@ peer from blocking the host.
 connection it pins the host's device id: a different device at that address is refused,
 and after repeated failures it re-discovers the host by id in case its IP changed.
 
+## Optional features (clipboard, files, shared text)
+
+Feature traffic shares the input connection but can never delay input:
+
+- **Envelope.** Protocol version 2 adds `Capabilities { features }` and
+  `Feature { channel, body }`. The core only validates the envelope (channel ≠ 0, body ≤
+  32 KiB, so one message always fits one encrypted frame); each feature module encodes and
+  validates its own body with the bounds-checked `protocol::Reader`. Frames are split at
+  message boundaries.
+- **Input first.** At most 16 bulk messages may wait in a connection's queue (`BulkGate`),
+  so bulk traffic can never fill the queue input depends on. The writer sends all pending
+  input and control messages first and interleaves bulk messages one at a time.
+- **Flow control.** Senders keep at most a window of unacknowledged bytes in flight
+  (`flow::Window`; 128 KiB "balanced", 1 MiB "fast"); receivers acknowledge after
+  consuming data (e.g. after writing to disk), which gives end-to-end backpressure and
+  bounds how much bulk data can sit in socket buffers ahead of a key press. Measured on
+  loopback (release): input p50 50 µs while an 8 MB stream runs at 40 MB/s.
+- **Feature hub.** `moush_engine::features::FeatureHub` lives for the whole app; services
+  (`FeatureService`) register once and see peers come and go regardless of role (host:
+  every connected client; client: the host). `on_message` runs on the connection's reader
+  thread — on a client that thread also injects input — so services only decode, validate
+  and hand work to their own threads through bounded queues.
+- **Capabilities.** Each side announces which features it allows with a peer (global
+  settings combined with the paired device's policy, stored in the trust store) and
+  re-announces after every settings or policy change. A feature is used only when both
+  sides allow it, and every receiver re-checks its own settings before acting.
+
 ## Security
 
 - Each installation has a long-term X25519 key pair, stored encrypted with DPAPI (only the
