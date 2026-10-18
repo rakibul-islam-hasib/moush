@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod clipboard_cmds;
 mod commands;
 mod dto;
 mod notify;
@@ -55,6 +56,14 @@ fn main() {
             commands::open_firewall_setup,
             commands::open_log_folder,
             commands::quit_app,
+            clipboard_cmds::get_clipboard_history,
+            clipboard_cmds::copy_clipboard_entry,
+            clipboard_cmds::delete_clipboard_entry,
+            clipboard_cmds::clear_clipboard_history,
+            clipboard_cmds::share_text,
+            clipboard_cmds::copy_shared_text,
+            clipboard_cmds::open_shared_link,
+            clipboard_cmds::dismiss_shared_text,
         ])
         .setup(move |tauri_app| {
             let handle = tauri_app.handle().clone();

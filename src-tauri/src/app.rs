@@ -3,13 +3,14 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter};
 
 use moush_engine::client::{ClientEngine, ClientOptions, ClientState, ConnectTarget};
+use moush_engine::clipboard::ClipboardService;
 use moush_engine::core::crypto::Identity;
 use moush_engine::core::discovery;
 use moush_engine::core::pairing::PairingBroker;
@@ -53,6 +54,8 @@ pub struct App {
     notify: Notify,
     /// Connects optional features (clipboard, file transfer) to the connected peers.
     pub hub: Arc<FeatureHub>,
+    /// Clipboard sync, history and text sharing (set once in `new`).
+    pub clipboard: OnceLock<Arc<ClipboardService>>,
     handle: AppHandle,
 }
 
@@ -83,10 +86,17 @@ impl App {
             platform: Mutex::new(PlatformInfo { os_build, windows11: os_build >= 22000, mica: false, elevated: system::is_elevated() }),
             notify,
             hub: FeatureHub::new(),
+            clipboard: OnceLock::new(),
             handle: handle.clone(),
         });
         let weak = Arc::downgrade(&app);
         app.hub.set_policy(move |id| weak.upgrade().map(|a| a.local_caps(id)).unwrap_or(0));
+        match crate::clipboard_cmds::start(&app, app.identity.device_id()) {
+            Ok(svc) => {
+                let _ = app.clipboard.set(svc);
+            }
+            Err(e) => log::error!("clipboard sync is unavailable: {e}"),
+        }
         // Emit snapshots from one thread, coalescing bursts of changes.
         let weak = Arc::downgrade(&app);
         thread::Builder::new()
@@ -472,9 +482,9 @@ impl App {
                     name: p.name,
                 })
                 .collect(),
-            clipboard: ClipboardStatus { enabled: s.clipboard.enabled, ..Default::default() },
+            clipboard: crate::clipboard_cmds::status(self, s.clipboard.enabled),
             transfers: Vec::new(),
-            shared_texts: Vec::new(),
+            shared_texts: crate::clipboard_cmds::shared_texts(self),
         }
     }
 
