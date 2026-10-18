@@ -21,10 +21,21 @@ keyboard follows the cursor. Move back and you are on the desktop again.
   measured on loopback (see [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
 - **Secure by default.** Every connection is encrypted and mutually authenticated (Noise
   XX). New devices must be approved on both computers by comparing a 6-digit code.
-- **No stuck keys.** Keys and buttons are released whenever the cursor leaves a computer,
-  the connection drops, or the app exits.
-- **Windows 11 look.** Fluent-style UI with Mica, light and dark themes; lives in the
-  notification area and uses ~16 MB of RAM when its window is closed.
+- **No stuck keys.** Every key is released on the computer that received its press —
+  when the cursor moves, the connection drops, the session locks or the app exits.
+- **Keyboard that follows you.** Alt+Tab and Win shortcuts act on the computer you are
+  working on (or stay on the host, if you prefer); Ctrl+Alt+Shift+Arrow jumps between
+  computers. See [docs/KEYBOARD.md](docs/KEYBOARD.md).
+- **Shared clipboard.** Text, rich text and images copied on one computer paste on the
+  others; sensitive clips (password managers) are skipped; optional in-memory history.
+- **File transfer.** Drag files onto the window: streamed, encrypted, integrity-checked,
+  resumable, with approval on the receiving side. Plus one-click sharing of text and links.
+- **Configurable per device.** Every feature can be switched off globally or per paired
+  device from the UI.
+- **Windows 11 look.** Fluent-inspired UI with Mica, light, dark and high-contrast themes,
+  reduced-motion support; lives in the notification area.
+- **Small.** ~2 MB installer, ~7 MB app; input path unaffected by transfers (see
+  [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
 
 ## Quick start
 
@@ -38,7 +49,7 @@ keyboard follows the cursor. Move back and you are on the desktop again.
    *Diagnostics* page.
 4. A pairing dialog appears on **both** computers. Check that the 6-digit codes match and
    click **Allow** on both. Paired devices reconnect automatically from then on.
-5. On the host open **Layout**. Your monitors are shown as Windows arranges them; drag the
+5. On the host open **Devices → Screen layout**. Your monitors are shown as Windows arranges them; drag the
    laptop so one of its edges touches the side of the monitor it sits next to on your
    desk (the touching segment turns blue), then **Save**. **Test** jumps the cursor to the
    laptop.
@@ -51,6 +62,8 @@ types there. Move back to return.
 | Shortcut | Effect |
 | --- | --- |
 | **Ctrl + Alt + Esc** | Bring the cursor back to the host immediately |
+| **Ctrl + Alt + Shift + Arrow** | Jump to the neighbouring computer in that direction |
+| **Ctrl + Alt + Shift + Home** | Jump back to the host |
 | **Scroll Lock** | Lock the cursor to the computer it is on (toggle; can be disabled) |
 
 The tray icon menu also has *Bring cursor back to this computer*.
@@ -76,22 +89,22 @@ npm install
 npx tauri build                     # release app + NSIS installer in target\release\bundle\nsis
 npx tauri dev                       # development build with hot reload
 cargo test --workspace              # unit + loopback integration tests
-cargo build --release -p moush-cli # headless tool (see below)
+cargo build --release -p moush-cli  # headless tool moush-cli.exe (see below)
 ```
 
 ### Headless tool
 
-`target\release\moush.exe` runs the same engine without the UI — useful for testing on
+`target\release\moush-cli.exe` runs the same engine without the UI — useful for testing on
 two machines, benchmarking and troubleshooting:
 
 ```
-moush monitors                       list monitors as Moush sees them
-moush discover                       find hosts on the LAN
-moush host [--port N]                run as host (pairing prompts in the console)
-moush client <ip|host-id> [--dry-run]  run as client; --dry-run logs instead of injecting
-moush bench [--events N]             full network-path latency benchmark on loopback
-moush selftest                       verify input capture/injection APIs on this machine
-moush identity                       print this device's id and public key
+moush-cli monitors                       list monitors as Moush sees them
+moush-cli discover                       find hosts on the LAN
+moush-cli host [--port N]                run as host (pairing prompts in the console)
+moush-cli client <ip|host-id> [--dry-run]  run as client; --dry-run logs instead of injecting
+moush-cli bench [--events N]             full network-path latency benchmark on loopback
+moush-cli selftest                       verify input capture/injection APIs on this machine
+moush-cli identity                       print this device's id and public key
 ```
 
 `scripts\e2e-local.ps1` runs a live end-to-end test on one machine (real GUI host with
@@ -103,10 +116,10 @@ real hooks, dry-run client, synthetic input; see the script header).
 | --- | --- |
 | `crates/moush-core` | OS-independent core: wire protocol, Noise channel, layout geometry, input router state machine, host/client networking, discovery, pairing and trust. Fully unit-tested. |
 | `crates/moush-engine` | Windows layer: low-level hooks, `SendInput`, monitor enumeration, DPAPI, autostart, firewall; host and client orchestration. |
-| `crates/moush-cli` | `moush` headless tool. |
+| `crates/moush-cli` | `moush-cli` headless tool. |
 | `src-tauri` | Desktop app: Tauri commands, snapshots/events, tray, window. |
 | `src` | React + TypeScript UI. `src/api/types.ts` is the UI ↔ backend contract. |
-| `docs` | [Install & usage guide](docs/GUIDE.md), [architecture](docs/ARCHITECTURE.md), [performance](docs/PERFORMANCE.md), [troubleshooting](docs/TROUBLESHOOTING.md). |
+| `docs` | [Install & usage guide](docs/GUIDE.md), [keyboard](docs/KEYBOARD.md), [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), [performance](docs/PERFORMANCE.md), [troubleshooting](docs/TROUBLESHOOTING.md). |
 
 Settings, the device identity (DPAPI-encrypted), paired devices and the layout are stored
 in `%APPDATA%\Moush`; logs in `%LOCALAPPDATA%\Moush\logs`.

@@ -5,8 +5,8 @@
 #   scripts\measure-size.ps1 -Label opt-s -Config 'profile.release.opt-level="s"'
 #   scripts\measure-size.ps1 -Label fat -Config 'profile.release.lto="fat"','profile.release.strip=true'
 #
-# The app (Moush.exe) and the CLI (moush.exe) have names that collide on a case-insensitive
-# file system, so they are built one after the other and copied out of the target directory.
+# The app (Moush.exe) and the CLI (moush-cli.exe) are built one after the other and copied
+# out of the target directory.
 # Needs `dist/` (run `npx vite build` first). Results go to target\size\<Label>\ and one line
 # is appended to target\size\results.csv.
 param(
@@ -34,15 +34,14 @@ function Build([string[]]$cargoArgs) {
     return [math]::Round($sw.Elapsed.TotalSeconds)
 }
 
-# Both binaries land on the same path (Moush.exe = moush.exe), so a package that cargo
-# considers fresh would not be re-linked and the copy would pick up the other binary:
-# clean each package's own artifacts first (cheap: dependencies stay built).
+# Clean each package's own artifacts first so both are re-linked with this profile
+# (cheap: dependencies stay built).
 & cargo clean --release -p moush 2>&1 | Out-Null
 $tApp = Build @("-p", "moush", "--features", "tauri/custom-protocol")
 Copy-Item "$env:CARGO_TARGET_DIR\release\Moush.exe" "$out\Moush.exe" -Force
 & cargo clean --release -p moush-cli 2>&1 | Out-Null
 $tCli = Build @("-p", "moush-cli")
-Copy-Item "$env:CARGO_TARGET_DIR\release\moush.exe" "$out\moush-cli.exe" -Force
+Copy-Item "$env:CARGO_TARGET_DIR\release\moush-cli.exe" "$out\moush-cli.exe" -Force
 if ((Get-FileHash "$out\Moush.exe").Hash -eq (Get-FileHash "$out\moush-cli.exe").Hash) {
     # Never run the GUI by mistake (it would start with the real user configuration).
     throw "app and CLI copies are identical; the CLI was not re-linked"
@@ -50,7 +49,7 @@ if ((Get-FileHash "$out\Moush.exe").Hash -eq (Get-FileHash "$out\moush-cli.exe")
 
 $app = (Get-Item "$out\Moush.exe").Length
 $cli = (Get-Item "$out\moush-cli.exe").Length
-Write-Host ("{0}: Moush.exe {1:N0} bytes ({2:N2} MB), moush.exe {3:N0} bytes; build {4}s + {5}s" -f $Label, $app, ($app / 1MB), $cli, $tApp, $tCli)
+Write-Host ("{0}: Moush.exe {1:N0} bytes ({2:N2} MB), moush-cli.exe {3:N0} bytes; build {4}s + {5}s" -f $Label, $app, ($app / 1MB), $cli, $tApp, $tCli)
 
 $p50 = ""; $p99 = ""; $bulkP50 = ""; $mbs = ""; $enc = ""; $dec = ""
 if (-not $SkipLatency) {

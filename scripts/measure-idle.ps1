@@ -2,8 +2,8 @@
 # dry-run CLI client connected to it over loopback, both idle. Reports engine start-up time,
 # connect time, CPU time, CPU %, context switches per second and memory after a warm-up.
 #
-#   scripts\measure-idle.ps1                       # 60 s, target\release\moush.exe
-#   scripts\measure-idle.ps1 -Seconds 120 -Exe path\to\moush.exe
+#   scripts\measure-idle.ps1                       # 60 s, target\release\moush-cli.exe
+#   scripts\measure-idle.ps1 -Seconds 120 -Exe path\to\moush-cli.exe
 #
 # The two engines get their own throw-away config directories, pre-paired with each other,
 # and the client is placed far away from the host's monitors in the layout, so moving the
@@ -17,7 +17,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Exe) { $Exe = Join-Path $root "target\release\moush.exe" }
+if (-not $Exe) { $Exe = Join-Path $root "target\release\moush-cli.exe" }
 if (-not (Test-Path $Exe)) { throw "$Exe not found: cargo build --release -p moush-cli" }
 $work = Join-Path ([IO.Path]::GetTempPath()) ("moush-idle-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
 $hostDir = Join-Path $work "host"; $clientDir = Join-Path $work "client"

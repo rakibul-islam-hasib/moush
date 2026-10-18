@@ -1,12 +1,12 @@
 //! `moush` – headless Moush for testing, benchmarking and troubleshooting.
 //!
-//!   moush monitors                  list monitors as Moush sees them
-//!   moush discover                  find hosts on the LAN
-//!   moush host [--port N]           run as host (pairing prompts on stdin)
-//!   moush client <addr|id> [--dry-run]
-//!   moush bench [--events N]        loopback latency benchmark of the full network path
-//!   moush selftest                  verify input APIs on this machine
-//!   moush identity                  print this device's id and public key
+//!   moush-cli monitors                  list monitors as Moush sees them
+//!   moush-cli discover                  find hosts on the LAN
+//!   moush-cli host [--port N]           run as host (pairing prompts on stdin)
+//!   moush-cli client <addr|id> [--dry-run]
+//!   moush-cli bench [--events N]        loopback latency benchmark of the full network path
+//!   moush-cli selftest                  verify input APIs on this machine
+//!   moush-cli identity                  print this device's id and public key
 //!
 //! Common options: --config-dir <dir>  (default %APPDATA%\Moush), --verbose
 
@@ -287,7 +287,7 @@ fn cmd_host(args: &Args) -> Result<(), String> {
 }
 
 fn cmd_client(args: &Args) -> Result<(), String> {
-    let target = args.positional.first().ok_or("usage: moush client <address|host-id> [--dry-run]")?;
+    let target = args.positional.first().ok_or("usage: moush-cli client <address|host-id> [--dry-run]")?;
     let (id, trust) = load_identity_and_trust(args)?;
     let target = if target.len() == 16 && target.chars().all(|c| c.is_ascii_hexdigit()) {
         ConnectTarget::Host { id: target.clone(), hint: None }
