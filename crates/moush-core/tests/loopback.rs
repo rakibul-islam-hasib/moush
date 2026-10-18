@@ -414,7 +414,9 @@ fn feature_traffic_flows_both_ways_without_starving_input() {
         "input latency during an 8 MB bulk stream: p50 {:.0} us, p95 {:.0} us, max {:.0} us; bulk throughput {mb_s:.0} MB/s",
         s.p50, s.p95, s.max
     );
-    assert!(s.p50 < 20_000.0, "input keeps flowing during bulk transfers");
+    // Unoptimized ChaCha dominates debug builds; the real bound is checked in release.
+    let bound = if cfg!(debug_assertions) { 200_000.0 } else { 2_000.0 };
+    assert!(s.p50 < bound, "input keeps flowing during bulk transfers");
 
     stop.store(true, Ordering::SeqCst);
     link.close();
