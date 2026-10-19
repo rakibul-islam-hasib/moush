@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moush — one mouse and keyboard for every Windows PC</title>
+    <meta
+      name="description"
+      content="Moush shares one mouse and keyboard across Windows computers on your local network. Seamless edge switching, shared clipboard, encrypted file transfer, secure pairing."
+    />
+    <meta name="theme-color" content="#5b4ff0" />
+    <meta property="og:title" content="Moush — one mouse and keyboard for every PC" />
+    <meta
+      property="og:description"
+      content="Move your cursor off the edge of one computer and keep working on the next. Windows 10/11, encrypted, low latency."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/png" href="assets/icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body id="top">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="#top" aria-label="Moush home">
+          <img src="assets/icon.png" alt="" width="34" height="34" />
+          <span>Moush</span>
+        </a>
+        <nav class="site-nav" aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#screenshots">Screenshots</a>
+          <a href="#install">Install</a>
+          <a href="#guide">Guide</a>
+          <a href="#troubleshooting">Troubleshooting</a>
+          <a href="https://github.com/rakibul-islam-hasib/moush" rel="noopener">GitHub</a>
+        </nav>
+        <a class="btn btn-primary btn-sm header-cta" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
+          Download
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="wrap hero-inner">
+          <p class="eyebrow">Windows 10 &amp; 11 · local network</p>
+          <h1>One mouse and keyboard,<br /><span class="grad">for every PC.</span></h1>
+          <p class="lede">
+            Move your cursor off the edge of one computer and it keeps going on the next. Moush shares your
+            mouse, keyboard, clipboard and files across Windows PCs on your LAN — encrypted, low latency, and
+            paired with a 6-digit code.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
+              Download for Windows
+            </a>
+            <a class="btn btn-ghost" href="#install">Read the guide</a>
+          </div>
+          <ul class="meta-chips" aria-label="Highlights">
+            <li>~2 MB installer</li>
+            <li>Per-user, no admin</li>
+            <li>Encrypted &amp; mutually authenticated</li>
+            <li>MIT licensed</li>
+          </ul>
+        </div>
+
+        <div class="wrap">
+          <figure class="window hero-window">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/home-dark.png" />
+              <img src="assets/screenshots/home.png" width="1280" height="800" alt="Moush Home screen: sharing on, two computers connected, quick settings and recent activity." />
+            </picture>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section id="features" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Why Moush</p>
+            <h2>A KVM switch that isn’t hardware</h2>
+            <p>
+              One app acts as both host and client. Pick a role on first launch and change it later. Everything
+              runs over a single encrypted TCP connection with no polling on the input path.
+            </p>
+          </div>
+
+          <div class="grid features-grid">
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+              </span>
+              <h3>Seamless edge switching</h3>
+              <p>Cross a shared edge and input follows the cursor. Edges shared with your own monitors keep behaving like normal Windows transitions.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="12" height="9" rx="1.5" /><rect x="14" y="10" width="7.5" height="5.5" rx="1.5" /><path d="M6 17h6" /></svg>
+              </span>
+              <h3>Multi-monitor &amp; mixed DPI</h3>
+              <p>Monitor sizes, positions and scaling are detected on both sides. A 150% laptop sits next to 100% monitors at its real-world size.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" /></svg>
+              </span>
+              <h3>Keyboard that follows you</h3>
+              <p>Alt+Tab and Win shortcuts act on the computer you’re working on — or stay on the host if you prefer. Jump between computers with the keyboard.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="8" y="2.5" width="8" height="4" rx="1" /><path d="M16 4.5h2a2 2 0 0 1 2 2V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h2" /><path d="M8 12h8M8 16h5" /></svg>
+              </span>
+              <h3>Shared clipboard</h3>
+              <p>Text, rich text and images sync both ways. Password-manager content is skipped, and an in-memory history lets you paste earlier clips.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M12 11v5M9.5 13.5 12 11l2.5 2.5" /></svg>
+              </span>
+              <h3>File transfer</h3>
+              <p>Drag files onto the window. Streamed, encrypted, integrity-checked and resumable, with approval on the receiving side.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9.5" /><path d="M7.5 10.5 5.8 12.2a3.5 3.5 0 0 0 5 5l1.7-1.7" /><path d="M16.5 13.5l1.7-1.7a3.5 3.5 0 0 0-5-5l-1.7 1.7" /></svg>
+              </span>
+              <h3>Text &amp; links</h3>
+              <p>Share a snippet or a URL in one click. Links open in the default browser on the other computer.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 2.5 20 6v6c0 5-3.5 8.2-8 9.5-4.5-1.3-8-4.5-8-9.5V6z" /><path d="m8.5 12 2.3 2.3 4.7-4.6" /></svg>
+              </span>
+              <h3>Secure by default</h3>
+              <p>Every connection uses Noise XX encryption with mutual authentication. A new device is trusted only after you approve a matching 6-digit code on both computers.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="17" r="2" /></svg>
+              </span>
+              <h3>Per-device permissions</h3>
+              <p>Switch clipboard, files or text sharing off globally or per paired device. A feature works only when both computers allow it.</p>
+            </article>
+
+            <article class="card feature">
+              <span class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z" /></svg>
+              </span>
+              <h3>Small &amp; fast</h3>
+              <p>Event-driven capture and injection. The app is roughly 7 MB and lives in the notification area; transfers never stall the input path.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screenshots -->
+      <section id="screenshots" class="section section-alt">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">A look around</p>
+            <h2>Built for Windows 11, at home on Windows 10</h2>
+            <p>Fluent-inspired surfaces with an optional Mica backdrop, light and dark themes, reduced-motion support and high-contrast friendly colours.</p>
+          </div>
+
+          <div class="gallery">
+            <figure class="shot">
+              <img src="assets/screenshots/devices.png" width="1280" height="800" loading="lazy" alt="Devices page listing connected and paired computers." />
+              <figcaption><strong>Devices</strong> — connected and paired computers, permissions, discovery.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/screenshots/layout.png" width="1280" height="800" loading="lazy" alt="Screen layout editor with two host monitors and a laptop placed on the left." />
+              <figcaption><strong>Screen layout</strong> — place each computer next to your real monitors.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/screenshots/features.png" width="1280" height="800" loading="lazy" alt="Features page with clipboard sync options and expanders." />
+              <figcaption><strong>Features</strong> — clipboard, keyboard, transfer and notification settings.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/screenshots/transfers.png" width="1280" height="800" loading="lazy" alt="Transfers page showing a pending incoming transfer, an active send and completed transfers." />
+              <figcaption><strong>Transfers</strong> — send files, approve incoming ones, share text and links.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/screenshots/client-devices.png" width="1280" height="800" loading="lazy" alt="Client role Devices page with a discovered host to connect to." />
+              <figcaption><strong>Client view</strong> — find a host and connect in one click.</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="assets/screenshots/diagnostics.png" width="1280" height="800" loading="lazy" alt="Diagnostics page with firewall state, latency and logs." />
+              <figcaption><strong>Diagnostics</strong> — firewall state, latency, device ID and logs.</figcaption>
+            </figure>
+          </div>
+
+          <figure class="shot dark-showcase">
+            <img src="assets/screenshots/home-dark.png" width="1280" height="800" loading="lazy" alt="Moush Home screen in dark theme." />
+            <figcaption><strong>Dark theme</strong> — every screen adapts, including the optional Mica backdrop.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Install -->
+      <section id="install" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Getting started</p>
+            <h2>Install and pair in about two minutes</h2>
+            <p>Install Moush on every computer you want to include. All of them must be on the same network.</p>
+          </div>
+
+          <div class="two-col">
+            <div class="card panel">
+              <h3>Requirements</h3>
+              <dl class="specs">
+                <div><dt>Operating system</dt><dd>Windows 10 or 11 (x64)</dd></div>
+                <div><dt>Network</dt><dd>Same LAN / subnet, private network</dd></div>
+                <div><dt>Installer</dt><dd>Per-user, no administrator rights</dd></div>
+                <div><dt>WebView2</dt><dd>Preinstalled on Windows 11; install the Evergreen runtime on Windows 10</dd></div>
+              </dl>
+              <a class="btn btn-primary btn-block" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
+                Download the latest installer
+              </a>
+            </div>
+
+            <ol class="steps">
+              <li>
+                <span class="step-num">1</span>
+                <div>
+                  <h3>Install on each computer</h3>
+                  <p>Run <code>Moush_x.y.z_x64-setup.exe</code>. It installs for the current user and needs no admin prompt.</p>
+                </div>
+              </li>
+              <li>
+                <span class="step-num">2</span>
+                <div>
+                  <h3>Choose a role</h3>
+                  <p>On the computer with the mouse and keyboard choose <strong>Host</strong>. On the others choose <strong>Client</strong>. When Windows asks, allow Moush on <strong>private</strong> networks.</p>
+                </div>
+              </li>
+              <li>
+                <span class="step-num">3</span>
+                <div>
+                  <h3>Pair the computers</h3>
+                  <p>On the client, pick the host under <strong>Devices</strong>. A dialog appears on both screens — check that the 6-digit codes match and click <strong>Allow</strong> on both.</p>
+                </div>
+              </li>
+              <li>
+                <span class="step-num">4</span>
+                <div>
+                  <h3>Arrange the screens</h3>
+                  <p>On the host open <strong>Devices → Screen layout</strong>. Drag the laptop until an edge touches the monitor it sits next to, then <strong>Save</strong>. <strong>Test</strong> jumps the cursor there.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
+
+          <div class="callout">
+            <strong>Discovery blocked?</strong> If the host doesn’t appear automatically, type its IP address — the
+            address is shown on the host’s <strong>Settings → Diagnostics</strong> page.
+          </div>
+        </div>
+      </section>
+
+      <!-- Guide -->
+      <section id="guide" class="section section-alt">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">How to use Moush</p>
+            <h2>The complete guide</h2>
+            <p>Everything below applies once your computers are paired and arranged in the layout editor.</p>
+          </div>
+
+          <div class="guide-block">
+            <div class="guide-copy">
+              <h3>Switching between computers</h3>
+              <p>
+                Move the cursor through a highlighted edge to hand over input; the keyboard types on the computer
+                the cursor is on. Move back and you are home again. Nothing is switched while a mouse button is
+                held, so drags stay on the computer that started them.
+              </p>
+              <table class="shortcuts">
+                <thead>
+                  <tr><th>Shortcut (host keyboard)</th><th>Effect</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Esc</kbd></td><td>Bring the cursor back to the host immediately</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>Arrow</kbd></td><td>Jump to the neighbouring computer in that direction</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>Home</kbd></td><td>Jump back to the host</td></tr>
+                  <tr><td><kbd>Scroll Lock</kbd></td><td>Lock the cursor to the current computer (toggle)</td></tr>
+                </tbody>
+              </table>
+              <p class="muted">The tray menu also has <em>Bring cursor back to this computer</em>. Keys and buttons are always released when the cursor leaves, the connection drops or the app exits — no stuck keys.</p>
+            </div>
+            <figure class="shot">
+              <img src="assets/screenshots/onboarding.png" width="1280" height="800" loading="lazy" alt="First launch: choose Host or Client." />
+              <figcaption><strong>First launch</strong> — pick a role; change it later in Settings.</figcaption>
+            </figure>
+          </div>
+
+          <div class="guide-block reverse">
+            <div class="guide-copy">
+              <h3>Clipboard, text and files</h3>
+              <p>
+                Copy on one computer and paste on another. Text, rich text and images are synchronised in both
+                directions; content that password managers mark as sensitive is skipped. <strong>Features →
+                Clipboard</strong> has per-format switches, a size limit and an in-memory history.
+              </p>
+              <p>
+                Drag files onto the Moush window, or use <strong>Transfers → Send files…</strong>. The receiving
+                computer can ask before accepting, and files land in <code>Downloads\Moush</code> by default.
+                Progress, speed, cancel and retry (which resumes partial files) live on <strong>Transfers</strong>.
+                You can also share a text or a link there.
+              </p>
+              <p class="muted">Folders aren’t supported yet — zip them first. Received files are never opened automatically and keep the Windows “downloaded from the internet” mark.</p>
+            </div>
+            <figure class="shot">
+              <img src="assets/screenshots/transfers.png" width="1280" height="800" loading="lazy" alt="Transfers page with incoming, active and finished transfers." />
+              <figcaption><strong>Transfers</strong> — approve, track and retry file sends.</figcaption>
+            </figure>
+          </div>
+
+          <div class="guide-block">
+            <div class="guide-copy">
+              <h3>Permissions and pages</h3>
+              <p>
+                Under <strong>Devices</strong>, open a paired device to decide whether it may use clipboard sync,
+                file transfer and text sharing with this computer. A feature works only when both sides allow it.
+              </p>
+              <ul class="page-list">
+                <li><strong>Home</strong> — sharing state, which computer has the cursor, quick feature switches and recent activity.</li>
+                <li><strong>Devices</strong> — connected and paired computers, permissions, discovery, and the <strong>Screen layout</strong> tab.</li>
+                <li><strong>Features</strong> — clipboard, keyboard &amp; switching, file transfer, notifications and clipboard history.</li>
+                <li><strong>Transfers</strong> — send files, approve incoming transfers, shared text and links.</li>
+                <li><strong>Settings</strong> — device name, role, appearance, startup, network and <strong>Diagnostics</strong>.</li>
+              </ul>
+            </div>
+            <figure class="shot">
+              <img src="assets/screenshots/settings.png" width="1280" height="800" loading="lazy" alt="Settings page with device name, role and appearance options." />
+              <figcaption><strong>Settings</strong> — device name, role, appearance, startup and network.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Limits -->
+      <section id="limits" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Good to know</p>
+            <h2>What Windows does not allow</h2>
+            <p>These limits come from Windows itself, not from Moush.</p>
+          </div>
+          <div class="grid limits-grid">
+            <article class="card limit">
+              <h3>Secure desktop</h3>
+              <p><strong>Ctrl+Alt+Del</strong>, the lock screen and UAC prompts run on the secure desktop. No application can capture or inject input there. When the host locks, the cursor returns automatically.</p>
+            </article>
+            <article class="card limit">
+              <h3>Win+L</h3>
+              <p><strong>Win+L</strong> always locks the host — Windows handles it before any application sees it.</p>
+            </article>
+            <article class="card limit">
+              <h3>Elevated windows</h3>
+              <p>Windows blocks injected input into administrator windows (UIPI). Run Moush as administrator on the client to control them; the same applies on the host while an elevated window has focus.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Troubleshooting -->
+      <section id="troubleshooting" class="section section-alt">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Troubleshooting</p>
+            <h2>Quick answers</h2>
+            <p>Logs live in <code>%LOCALAPPDATA%\Moush\logs\mouseshare.log</code>. The Diagnostics page shows the firewall state, latency and the most recent lines.</p>
+          </div>
+
+          <div class="faq">
+            <details>
+              <summary>The client can’t find the host</summary>
+              <p>Both computers must be on the same network. Guest Wi-Fi usually isolates devices, and VPNs can block discovery. Connect by address instead: the host’s IPs are on its Diagnostics page. Also check <strong>Settings → Let other computers find this one</strong>.</p>
+            </details>
+            <details>
+              <summary>“Refused the connection” or “no answer”</summary>
+              <p>Make sure the other computer is set to <strong>Host</strong> and sharing is on. Windows Firewall must allow Moush — use <strong>Diagnostics → Add firewall rule</strong>, or set the network to Private. Third-party firewalls should allow <code>Moush.exe</code>, TCP 24800 and UDP 24801.</p>
+            </details>
+            <details>
+              <summary>The cursor doesn’t cross to the laptop</summary>
+              <p>In <strong>Devices → Screen layout</strong>, the laptop rectangle must touch a monitor edge (it highlights blue). Check that Scroll Lock hasn’t locked the cursor, and that the corner dead zone or switch delay isn’t set too high. Switching is disabled while a mouse button is held.</p>
+            </details>
+            <details>
+              <summary>Keys or clicks don’t work on the client</summary>
+              <p>The focused window on the client is probably elevated. Run Moush as administrator on the client. Lock screen, UAC and Ctrl+Alt+Del cannot be controlled remotely by design.</p>
+            </details>
+            <details>
+              <summary>Reset everything</summary>
+              <p>Quit Moush from the tray and delete <code>%APPDATA%\Moush</code>. Devices will need to be paired again.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- Build -->
+      <section id="build" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">For developers</p>
+            <h2>Build and run from source</h2>
+            <p>Windows 10/11, Rust 1.85+ (MSVC toolchain), Node.js 20+ and the WebView2 runtime.</p>
+          </div>
+
+          <div class="two-col">
+            <div class="card panel">
+              <h3>Desktop app</h3>
+<pre><code>npm install
+npx tauri build                 # release app + NSIS installer
+npx tauri dev                   # dev build with hot reload
+cargo test --workspace          # unit + loopback tests</code></pre>
+              <p class="muted">The installer lands in <code>target\release\bundle\nsis</code>.</p>
+            </div>
+
+            <div class="card panel">
+              <h3>Headless tool</h3>
+<pre><code>cargo build --release -p moush-cli
+
+moush-cli monitors
+moush-cli discover
+moush-cli host [--port N]
+moush-cli client &lt;ip|host-id&gt; [--dry-run]
+moush-cli bench [--events N]
+moush-cli selftest
+moush-cli identity</code></pre>
+              <p class="muted"><code>moush-cli.exe</code> runs the same engine without the UI — useful for testing, benchmarking and troubleshooting.</p>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <h3>Files, ports and reset</h3>
+            <table class="data">
+              <tbody>
+                <tr><th>Settings, identity, paired devices, layout</th><td><code>%APPDATA%\Moush</code></td></tr>
+                <tr><th>Logs</th><td><code>%LOCALAPPDATA%\Moush\logs\mouseshare.log</code></td></tr>
+                <tr><th>TCP</th><td>24800 (input connection)</td></tr>
+                <tr><th>UDP</th><td>24801 (discovery broadcasts)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <img src="assets/icon.png" alt="" width="28" height="28" />
+          <div>
+            <strong>Moush</strong>
+            <p>One mouse and keyboard for every Windows PC on your network.</p>
+          </div>
+        </div>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://github.com/rakibul-islam-hasib/moush" rel="noopener">Source</a>
+          <a href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">Releases</a>
+          <a href="https://github.com/rakibul-islam-hasib/moush/tree/main/docs" rel="noopener">Docs</a>
+          <a href="https://github.com/rakibul-islam-hasib/moush/issues" rel="noopener">Issues</a>
+        </nav>
+      </div>
+      <div class="wrap footer-note">
+        <span>MIT licensed. Windows 10 &amp; 11.</span>
+        <span>Built with Rust, Tauri and React.</span>
+      </div>
+    </footer>
+  </body>
+</html>
