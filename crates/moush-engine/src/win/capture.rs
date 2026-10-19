@@ -13,46 +13,52 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED};
-use windows::Win32::System::RemoteDesktop::{WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION};
+use windows::Win32::System::Power::{ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState};
+use windows::Win32::System::RemoteDesktop::{
+    NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
+};
 use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, CreateCursor, GetForegroundWindow, GetWindowThreadProcessId, IsWindow, KillTimer, SetForegroundWindow,
-    SetTimer, WM_TIMER, CreateWindowExW, DefWindowProcW, DestroyCursor, DestroyWindow, DispatchMessageW,
-    GetCursorPos, GetMessageW, PostThreadMessageW, RegisterClassExW, SetCursor, SetCursorPos, SetLayeredWindowAttributes,
-    SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWindowsHookEx, HCURSOR, HHOOK, HWND_TOPMOST,
-    KBDLLHOOKSTRUCT, LLKHF_EXTENDED, LLKHF_INJECTED, LLKHF_UP, LLMHF_INJECTED, LWA_ALPHA, MA_NOACTIVATE, MSG,
-    MSLLHOOKSTRUCT, SWP_NOACTIVATE, SW_HIDE, SW_SHOWNOACTIVATE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_DISPLAYCHANGE,
+    CallNextHookEx, CreateCursor, CreateWindowExW, DefWindowProcW, DestroyCursor, DestroyWindow, DispatchMessageW,
+    GetCursorPos, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, HCURSOR, HHOOK, HWND_TOPMOST, IsWindow,
+    KBDLLHOOKSTRUCT, KillTimer, LLKHF_EXTENDED, LLKHF_INJECTED, LLKHF_UP, LLMHF_INJECTED, LWA_ALPHA, MA_NOACTIVATE,
+    MSG, MSLLHOOKSTRUCT, PostThreadMessageW, RegisterClassExW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetCursor,
+    SetCursorPos, SetForegroundWindow, SetLayeredWindowAttributes, SetTimer, SetWindowPos, SetWindowsHookExW,
+    ShowWindow, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_DISPLAYCHANGE,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEACTIVATE, WM_MOUSEHWHEEL,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_WTSSESSION_CHANGE, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_POPUP, WTS_SESSION_LOCK,
+    WM_TIMER, WM_WTSSESSION_CHANGE, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_POPUP, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK,
 };
+use windows::core::{PCWSTR, w};
 
 use moush_core::geometry::{Layout, Point};
-use moush_core::net::{try_send, Outbox, Outgoing};
+use moush_core::inject::Injector;
+use moush_core::net::{Outbox, Outgoing, try_send};
 use moush_core::protocol::{MouseButton, WheelAxis};
 use moush_core::router::{Action, RawInput, Router, RouterSettings, Verdict};
 use moush_core::stats::Stats;
 use moush_core::util::{mono_ms, mono_us};
 
 use super::dpi::make_thread_dpi_aware;
+use super::inject::SendInputInjector;
 
 const WM_CAPTURE_CMD: u32 = WM_APP + 1;
 /// Posted to ourselves to re-install the hooks outside of a hook callback.
 const WM_REHOOK: u32 = WM_APP + 2;
+/// `WM_REHOOK` parameter: the hooks were bypassed, so input state must be re-synchronised.
+const REHOOK_AFTER_GAP: usize = 1;
 const WATCHDOG_TIMER: usize = 1;
 const WATCHDOG_MS: u32 = 1000;
 /// Input Windows saw this much later than our hooks did means the hooks were bypassed.
@@ -96,7 +102,12 @@ pub struct Capture {
 
 impl Capture {
     /// Starts the capture thread and installs the hooks. Fails if Windows refuses the hooks.
-    pub fn start(layout: Layout, settings: RouterSettings, stats: Arc<Stats>, events: Arc<dyn CaptureEvents>) -> io::Result<Self> {
+    pub fn start(
+        layout: Layout,
+        settings: RouterSettings,
+        stats: Arc<Stats>,
+        events: Arc<dyn CaptureEvents>,
+    ) -> io::Result<Self> {
         if std::env::var_os("MOUSH_TEST_ACCEPT_INJECTED").is_some() {
             log::warn!("test mode: synthetic input is routed like physical input");
             ACCEPT_INJECTED.store(true, Ordering::Relaxed);
@@ -230,6 +241,15 @@ fn capture_thread(
             if let Err(e) = install_hooks(hinst) {
                 log::error!("re-installing input hooks failed: {e}");
             }
+            if msg.wParam.0 == REHOOK_AFTER_GAP {
+                // Events were missed while the hooks were bypassed: key releases among them
+                // would leave keys stuck. Release what went to the client and forget host
+                // keys that Windows reports as up.
+                with_state(|s| {
+                    s.router.resync_after_gap(|vk| unsafe { GetAsyncKeyState(vk as i32) } < 0, &mut s.actions);
+                    s.execute(mono_us());
+                });
+            }
             continue;
         }
         if msg.hwnd.is_invalid() && msg.message == WM_CAPTURE_CMD {
@@ -297,9 +317,10 @@ fn install_hooks(hinst: HINSTANCE) -> Result<(), String> {
     Ok(())
 }
 
-fn request_rehook() {
+fn request_rehook(after_gap: bool) {
+    let param = if after_gap { REHOOK_AFTER_GAP } else { 0 };
     unsafe {
-        let _ = PostThreadMessageW(GetCurrentThreadId(), WM_REHOOK, WPARAM(0), LPARAM(0));
+        let _ = PostThreadMessageW(GetCurrentThreadId(), WM_REHOOK, WPARAM(param), LPARAM(0));
     }
 }
 
@@ -322,7 +343,7 @@ fn watchdog() {
             return;
         }
         log::warn!("input reached Windows without passing our hooks ({behind} ms); re-installing them");
-        request_rehook();
+        request_rehook(true);
     }
 }
 
@@ -430,8 +451,13 @@ impl HookState {
                     // into Moush instead of reaching the client. Move focus to the
                     // plain helper window (stray keys are dropped there) and give it back
                     // when the cursor returns. Other programs' focus is never touched.
+                    // In mouse-only mode typing stays on the host, so focus is left alone.
                     let fg = GetForegroundWindow();
-                    if owned_by_us(fg) && fg != self.hider && SetForegroundWindow(self.hider).as_bool() {
+                    if self.router.settings().forward_keyboard
+                        && owned_by_us(fg)
+                        && fg != self.hider
+                        && SetForegroundWindow(self.hider).as_bool()
+                    {
                         self.refocus = Some(fg);
                     }
                 },
@@ -446,7 +472,7 @@ impl HookState {
                 Action::KeepAwake(on) => self.set_keep_awake(on),
                 Action::ActiveChanged(c) => {
                     if c.is_some() {
-                        request_rehook();
+                        request_rehook(false);
                     }
                     match &c {
                         Some(id) => log::info!("input now goes to {id}"),
@@ -457,6 +483,14 @@ impl HookState {
                 Action::LockChanged(l) => {
                     log::info!("cursor {}", if l { "locked to the current computer" } else { "unlocked" });
                     self.events.lock_changed(l);
+                }
+                Action::LocalKey { vk, scan, extended, down } => {
+                    // Injected events are queued behind the event being processed and come
+                    // back through our hooks tagged with INJECT_MARKER, which passes them on.
+                    // Fails (UIPI) if the foreground window is elevated and Moush is not.
+                    if !SendInputInjector.key(vk, scan, extended, down, true) {
+                        log::debug!("could not inject key 0x{vk:02x} on this computer");
+                    }
                 }
             }
         }
@@ -527,7 +561,9 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
         note_event();
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
         let msg = wparam.0 as u32;
-        if is_foreign(info.flags & LLKHF_INJECTED == LLKHF_INJECTED, info.dwExtraInfo) || !(1..=0xFE).contains(&info.vkCode) {
+        if is_foreign(info.flags & LLKHF_INJECTED == LLKHF_INJECTED, info.dwExtraInfo)
+            || !(1..=0xFE).contains(&info.vkCode)
+        {
             return unsafe { CallNextHookEx(None, code, wparam, lparam) };
         }
         let down = matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN) && info.flags & LLKHF_UP != LLKHF_UP;
@@ -612,15 +648,169 @@ unsafe extern "system" fn hider_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
             unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
         }
         WM_WTSSESSION_CHANGE => {
-            if wparam.0 as u32 == WTS_SESSION_LOCK {
-                // The secure desktop takes over input; bring the cursor home first.
+            let event = wparam.0 as u32;
+            if event == WTS_SESSION_LOCK || event == WTS_SESSION_UNLOCK {
+                // The secure desktop takes over input: bring the cursor home, and forget held
+                // keys, whose releases (e.g. of Win+L) go to the secure desktop, not to us.
                 with_state(|s| {
-                    s.router.force_local(&mut s.actions);
+                    s.router.session_changed(&mut s.actions);
                     s.execute(mono_us());
                 });
             }
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::sync_channel;
+    use std::time::{Duration, Instant};
+
+    use moush_core::geometry::{ClientPlacement, Rect, Screen};
+    use moush_core::keys::{self, ShortcutSet};
+    use moush_core::protocol::{Message, key_flags};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VIRTUAL_KEY,
+    };
+
+    const VK_F23: u16 = 0x86;
+
+    struct NoEvents;
+    impl CaptureEvents for NoEvents {
+        fn active_changed(&self, _: Option<String>) {}
+        fn lock_changed(&self, _: bool) {}
+        fn displays_changed(&self) {}
+        fn send_failed(&self, _: &str) {}
+    }
+
+    /// Synthetic key without our marker: with ACCEPT_INJECTED the hooks route it like a
+    /// physical key.
+    fn tap(vk: u16, down: bool) {
+        let input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(vk),
+                    wScan: 0,
+                    dwFlags: if down { KEYBD_EVENT_FLAGS(0) } else { KEYEVENTF_KEYUP },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        assert_eq!(unsafe { SendInput(&[input], size_of::<INPUT>() as i32) }, 1, "SendInput refused");
+        thread::sleep(Duration::from_millis(30));
+    }
+
+    fn host_down(vk: u16) -> bool {
+        unsafe { GetAsyncKeyState(vk as i32) < 0 }
+    }
+
+    /// Everything the fake client received in the last moments.
+    fn drain(rx: &Receiver<Outgoing>) -> Vec<Message> {
+        let deadline = Instant::now() + Duration::from_millis(150);
+        let mut v = Vec::new();
+        while let Ok(o) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            v.push(o.msg);
+        }
+        v
+    }
+
+    fn keys_of(msgs: &[Message]) -> Vec<(u16, bool)> {
+        msgs.iter()
+            .filter_map(|m| match m {
+                Message::Key { vk, flags, .. } => Some((*vk, flags & key_flags::DOWN != 0)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Drives the real low-level hooks, router and action executor with harmless synthetic
+    /// keys (F23/F24, Ctrl, Shift, Ctrl+Alt+Shift+Home) and a fake client queue. Needs an
+    /// unlocked interactive session; run by hand:
+    /// `cargo test -p moush-engine real_hooks -- --ignored --nocapture --test-threads=1`
+    #[test]
+    #[ignore = "drives the real hooks with synthetic input on the interactive desktop"]
+    fn real_hooks_route_keys_without_stuck_keys() {
+        ACCEPT_INJECTED.store(true, Ordering::Relaxed);
+        let mut mons: Vec<Rect> = super::super::monitors::enumerate().iter().map(|m| m.rect).collect();
+        if mons.is_empty() {
+            mons.push(Rect::new(0, 0, 1920, 1080));
+        }
+        let layout = Layout {
+            host: Screen::new(mons),
+            clients: vec![ClientPlacement {
+                id: "c".into(),
+                screen: Screen::new(vec![Rect::new(0, 0, 1920, 1080)]),
+                origin_x: -100_000.0, // far away: never reached through an edge
+                origin_y: 0.0,
+                scale: 1.0,
+            }],
+        };
+        let settings =
+            RouterSettings { local_shortcuts: ShortcutSet::parse(&["Ctrl+Shift+F23"]).0, ..RouterSettings::default() };
+        let capture = Capture::start(layout, settings, Arc::new(Stats::new()), Arc::new(NoEvents)).expect("hooks");
+        let (tx, rx) = sync_channel(256);
+        capture.send(CaptureCmd::AddClient { id: "c".into(), outbox: tx });
+        let original = cursor_pos();
+        capture.send(CaptureCmd::SwitchTo("c".into()));
+        let enter = drain(&rx);
+        assert!(matches!(enter.first(), Some(Message::Enter { .. })), "switch: {enter:?}");
+
+        // 1. Plain key: forwarded, swallowed on the host.
+        tap(keys::VK_F24, true);
+        let host_saw_f24 = host_down(keys::VK_F24);
+        tap(keys::VK_F24, false);
+        assert_eq!(keys_of(&drain(&rx)), vec![(keys::VK_F24, true), (keys::VK_F24, false)]);
+        assert!(!host_saw_f24, "F24 leaked to the host");
+
+        // 2. Local shortcut typed while the client is active: modifiers move to the host.
+        tap(keys::VK_LCONTROL, true);
+        tap(keys::VK_LSHIFT, true);
+        assert!(!host_down(keys::VK_LCONTROL) && !host_down(keys::VK_LSHIFT), "modifiers leaked to the host");
+        tap(VK_F23, true);
+        thread::sleep(Duration::from_millis(50));
+        let host_has_combo = host_down(keys::VK_LCONTROL) && host_down(keys::VK_LSHIFT) && host_down(VK_F23);
+        tap(VK_F23, false);
+        tap(keys::VK_LSHIFT, false);
+        tap(keys::VK_LCONTROL, false);
+        assert_eq!(
+            keys_of(&drain(&rx)),
+            vec![
+                (keys::VK_LCONTROL, true),
+                (keys::VK_LSHIFT, true),
+                (keys::VK_LSHIFT, false),
+                (keys::VK_LCONTROL, false)
+            ]
+        );
+        assert!(host_has_combo, "Ctrl+Shift+F23 was not re-pressed on the host");
+        for vk in [keys::VK_LCONTROL, keys::VK_LSHIFT, VK_F23] {
+            assert!(!host_down(vk), "vk {vk:#x} stuck on the host");
+        }
+
+        // 3. Switching hotkey back to the host: consumed, nothing stuck anywhere.
+        for vk in [keys::VK_LCONTROL, keys::VK_LMENU, keys::VK_LSHIFT] {
+            tap(vk, true);
+        }
+        tap(keys::VK_HOME, true);
+        tap(keys::VK_HOME, false);
+        for vk in [keys::VK_LSHIFT, keys::VK_LMENU, keys::VK_LCONTROL] {
+            tap(vk, false);
+        }
+        let msgs = drain(&rx);
+        assert!(msgs.contains(&Message::Leave), "hotkey did not return home: {msgs:?}");
+        assert!(!keys_of(&msgs).iter().any(|(vk, _)| *vk == keys::VK_HOME), "Home leaked to the client");
+        for vk in [keys::VK_LCONTROL, keys::VK_LMENU, keys::VK_LSHIFT, keys::VK_HOME] {
+            assert!(!host_down(vk), "vk {vk:#x} stuck on the host");
+        }
+
+        capture.stop();
+        unsafe {
+            let _ = SetCursorPos(original.x, original.y);
+        }
+        ACCEPT_INJECTED.store(false, Ordering::Relaxed);
     }
 }

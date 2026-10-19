@@ -1,12 +1,12 @@
 //! `moush` – headless Moush for testing, benchmarking and troubleshooting.
 //!
-//!   moush monitors                  list monitors as Moush sees them
-//!   moush discover                  find hosts on the LAN
-//!   moush host [--port N]           run as host (pairing prompts on stdin)
-//!   moush client <addr|id> [--dry-run]
-//!   moush bench [--events N]        loopback latency benchmark of the full network path
-//!   moush selftest                  verify input APIs on this machine
-//!   moush identity                  print this device's id and public key
+//!   moush-cli monitors                  list monitors as Moush sees them
+//!   moush-cli discover                  find hosts on the LAN
+//!   moush-cli host [--port N]           run as host (pairing prompts on stdin)
+//!   moush-cli client <addr|id> [--dry-run]
+//!   moush-cli bench [--events N]        loopback latency benchmark of the full network path
+//!   moush-cli selftest                  verify input APIs on this machine
+//!   moush-cli identity                  print this device's id and public key
 //!
 //! Common options: --config-dir <dir>  (default %APPDATA%\Moush), --verbose
 
@@ -23,11 +23,11 @@ use moush_engine::client::{ClientEngine, ClientOptions, ClientState, ConnectTarg
 use moush_engine::core::crypto::Identity;
 use moush_engine::core::discovery;
 use moush_engine::core::inject::{InjectState, Injector};
-use moush_engine::core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig};
+use moush_engine::core::net::client::{ClientEvents, ClientLink, SessionConfig, run_session};
 use moush_engine::core::net::host::{ClientHandle, HostEvents, HostServer};
 use moush_engine::core::net::{Outgoing, PeerInfo};
 use moush_engine::core::pairing::PairingBroker;
-use moush_engine::core::protocol::{key_flags, Message, MonitorDesc, MouseButton, WheelAxis, DEFAULT_PORT};
+use moush_engine::core::protocol::{DEFAULT_PORT, Message, MonitorDesc, MouseButton, WheelAxis, key_flags};
 use moush_engine::core::router::RouterSettings;
 use moush_engine::core::stats::{LatencyRing, LatencySummary, Stats};
 use moush_engine::core::trust::TrustStore;
@@ -47,7 +47,15 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { cmd: String::new(), positional: vec![], port: DEFAULT_PORT, events: 2000, dry_run: false, verbose: false, config_dir: None };
+    let mut a = Args {
+        cmd: String::new(),
+        positional: vec![],
+        port: DEFAULT_PORT,
+        events: 2000,
+        dry_run: false,
+        verbose: false,
+        config_dir: None,
+    };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -85,7 +93,16 @@ fn main() {
         "selftest" => cmd_selftest(),
         "identity" => cmd_identity(&args),
         _ => {
-            println!("{}", include_str!("main.rs").lines().skip(2).take(9).map(|l| l.trim_start_matches("//!")).collect::<Vec<_>>().join("\n"));
+            println!(
+                "{}",
+                include_str!("main.rs")
+                    .lines()
+                    .skip(2)
+                    .take(9)
+                    .map(|l| l.trim_start_matches("//!"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
             Ok(())
         }
     };
@@ -140,7 +157,10 @@ fn cmd_discover() -> Result<(), String> {
     println!("probing {:?} ...", discovery::broadcast_targets());
     let found = discovery::scan(Duration::from_millis(1500)).map_err(|e| e.to_string())?;
     if found.is_empty() {
-        println!("no hosts answered (is a host running, and is UDP {} allowed by its firewall?)", moush_engine::core::protocol::DISCOVERY_PORT);
+        println!(
+            "no hosts answered (is a host running, and is UDP {} allowed by its firewall?)",
+            moush_engine::core::protocol::DISCOVERY_PORT
+        );
     }
     for f in found {
         println!("{:<24} {:<22} id {}", f.announce.name, f.addr, f.announce.id);
@@ -212,6 +232,7 @@ fn cmd_host(args: &Args) -> Result<(), String> {
         trust,
         stdin_broker(),
         stats.clone(),
+        moush_engine::features::FeatureHub::new(),
         Arc::new(|| {}),
     )
     .map_err(|e| e.to_string())?;
@@ -235,11 +256,23 @@ fn cmd_host(args: &Args) -> Result<(), String> {
         let clients = engine.clients();
         let line = format!(
             "clients: [{}]  active: {}  layout: [{}]",
-            clients.iter().map(|c| format!("{} {} rtt {:.1}ms", c.name, c.addr, c.rtt_ms.unwrap_or(-1.0))).collect::<Vec<_>>().join(", "),
+            clients
+                .iter()
+                .map(|c| format!("{} {} rtt {:.1}ms", c.name, c.addr, c.rtt_ms.unwrap_or(-1.0)))
+                .collect::<Vec<_>>()
+                .join(", "),
             v.active.as_deref().unwrap_or("host"),
             v.layout
                 .iter()
-                .map(|c| format!("{}@({:.0},{:.0}) {:.0}x{:.0}{}", c.name, c.rect.x, c.rect.y, c.rect.w, c.rect.h, if c.adjacent { "" } else { " UNREACHABLE" }))
+                .map(|c| format!(
+                    "{}@({:.0},{:.0}) {:.0}x{:.0}{}",
+                    c.name,
+                    c.rect.x,
+                    c.rect.y,
+                    c.rect.w,
+                    c.rect.h,
+                    if c.adjacent { "" } else { " UNREACHABLE" }
+                ))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -254,7 +287,7 @@ fn cmd_host(args: &Args) -> Result<(), String> {
 }
 
 fn cmd_client(args: &Args) -> Result<(), String> {
-    let target = args.positional.first().ok_or("usage: moush client <address|host-id> [--dry-run]")?;
+    let target = args.positional.first().ok_or("usage: moush-cli client <address|host-id> [--dry-run]")?;
     let (id, trust) = load_identity_and_trust(args)?;
     let target = if target.len() == 16 && target.chars().all(|c| c.is_ascii_hexdigit()) {
         ConnectTarget::Host { id: target.clone(), hint: None }
@@ -264,11 +297,18 @@ fn cmd_client(args: &Args) -> Result<(), String> {
     let stats = Arc::new(Stats::new());
     let engine = ClientEngine::start(
         target,
-        ClientOptions { name: system::computer_name(), default_port: args.port, auto_reconnect: true, dry_run: args.dry_run },
+        ClientOptions {
+            name: system::computer_name(),
+            default_port: args.port,
+            auto_reconnect: true,
+            dry_run: args.dry_run,
+            focus_on_enter: false,
+        },
         id,
         trust,
         stdin_broker(),
         stats.clone(),
+        moush_engine::features::FeatureHub::new(),
         Arc::new(|| {}),
         |_| {},
     )
@@ -310,7 +350,10 @@ fn cmd_client(args: &Args) -> Result<(), String> {
 fn print_stats(s: &Stats) {
     let us = |n: &str, l: LatencySummary| {
         if l.count > 0 {
-            println!("  {n:<26} n={:<6} p50 {:>7.0} us  p95 {:>7.0} us  p99 {:>7.0} us  max {:>7.0} us", l.count, l.p50, l.p95, l.p99, l.max);
+            println!(
+                "  {n:<26} n={:<6} p50 {:>7.0} us  p95 {:>7.0} us  p99 {:>7.0} us  max {:>7.0} us",
+                l.count, l.p50, l.p95, l.p99, l.max
+            );
         }
     };
     println!("statistics:");
@@ -358,7 +401,7 @@ impl HostEvents for BenchHost {
 
 struct Quiet;
 impl ClientEvents for Quiet {
-    fn connected(&self, _: &PeerInfo) {}
+    fn connected(&self, _: &PeerInfo, _: &moush_engine::core::net::PeerSender) {}
     fn active_changed(&self, _: bool) {}
 }
 
@@ -373,8 +416,16 @@ fn cmd_bench(args: &Args) -> Result<(), String> {
     client_trust.add(host_id.public_key(), "bench-host", moush_engine::core::trust::TrustRole::Host, None).ok();
     let (ctx, crx) = mpsc::channel();
     let host_stats = Arc::new(Stats::new());
-    let server = HostServer::start(std::net::SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0), "bench-host".into(), host_id, host_trust, PairingBroker::new(Arc::new(|| {})), host_stats.clone(), Arc::new(BenchHost(Mutex::new(ctx))))
-        .map_err(|e| e.to_string())?;
+    let server = HostServer::start(
+        std::net::SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0),
+        "bench-host".into(),
+        host_id,
+        host_trust,
+        PairingBroker::new(Arc::new(|| {})),
+        host_stats.clone(),
+        Arc::new(BenchHost(Mutex::new(ctx))),
+    )
+    .map_err(|e| e.to_string())?;
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, server.port()));
     let (etx, erx) = mpsc::channel();
     let stop = Arc::new(AtomicBool::new(false));
@@ -394,7 +445,15 @@ fn cmd_bench(args: &Args) -> Result<(), String> {
                     trust: &client_trust,
                     broker: &broker,
                     stats: &client_stats,
-                    screens: vec![MonitorDesc { x: 0, y: 0, width: 1920, height: 1080, dpi: 96, primary: true, name: "bench".into() }],
+                    screens: vec![MonitorDesc {
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
+                        dpi: 96,
+                        primary: true,
+                        name: "bench".into(),
+                    }],
                     stop: &stop,
                 },
                 &mut inject,
@@ -416,7 +475,10 @@ fn cmd_bench(args: &Args) -> Result<(), String> {
     for i in 0..n {
         let t = mono_us();
         let flags = if i % 2 == 0 { key_flags::DOWN } else { 0 };
-        client.outbox.send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags }, t_us: t }).map_err(|e| e.to_string())?;
+        client
+            .outbox
+            .send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags }, t_us: t })
+            .map_err(|e| e.to_string())?;
         let at = erx.recv_timeout(Duration::from_secs(5)).map_err(|_| "event lost")?;
         ring.record(at.saturating_sub(t) as u32);
         // Pace to 1 kHz like a gaming mouse.
@@ -426,7 +488,10 @@ fn cmd_bench(args: &Args) -> Result<(), String> {
         }
     }
     let s = ring.summary();
-    println!("enqueue -> injected (one way, loopback): mean {:.0} us  p50 {:.0} us  p95 {:.0} us  p99 {:.0} us  max {:.0} us", s.mean, s.p50, s.p95, s.p99, s.max);
+    println!(
+        "enqueue -> injected (one way, loopback): mean {:.0} us  p50 {:.0} us  p95 {:.0} us  p99 {:.0} us  max {:.0} us",
+        s.mean, s.p50, s.p95, s.p99, s.max
+    );
     let (_, replies, rtt) = server.latency_test(&client.id, 200).map_err(|e| e.to_string())?;
     println!("ping round trip: {replies}/200, p50 {:.3} ms  p99 {:.3} ms", rtt.p50, rtt.p99);
     println!("host send path:");
@@ -467,7 +532,14 @@ fn cmd_selftest() -> Result<(), String> {
     let mut checked = 0;
     for m in &mons {
         let r = m.rect;
-        for (x, y) in [(r.x, r.y), (r.x + 1, r.y + 1), (r.x + r.w / 2, r.y + r.h / 2), (r.x + r.w - 2, r.y + r.h - 2), (r.x + r.w - 1, r.y + r.h - 1), (r.x + 333, r.y + 777 % r.h)] {
+        for (x, y) in [
+            (r.x, r.y),
+            (r.x + 1, r.y + 1),
+            (r.x + r.w / 2, r.y + r.h / 2),
+            (r.x + r.w - 2, r.y + r.h - 2),
+            (r.x + r.w - 1, r.y + r.h - 1),
+            (r.x + 333, r.y + 777 % r.h),
+        ] {
             if !inj.move_abs(x, y) {
                 println!("    SendInput rejected the move (another program may be blocking input)");
                 ok = false;
@@ -535,4 +607,3 @@ fn cmd_selftest() -> Result<(), String> {
         Err("selftest found problems (see above)".into())
     }
 }
-

@@ -1,5 +1,6 @@
 //! End-to-end tests over real TCP on loopback: handshake, pairing, input delivery,
-//! keepalive, reconnect with stored trust, rejection, and stuck-key release.
+//! keepalive, reconnect with stored trust, rejection, stuck-key release, and feature
+//! traffic sharing the connection with input.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,12 +10,13 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use moush_core::crypto::Identity;
+use moush_core::flow::{Acquire, Window};
 use moush_core::inject::{InjectState, Injector};
-use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
+use moush_core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
 use moush_core::net::host::{ClientHandle, HostEvents, HostServer};
-use moush_core::net::{Outgoing, PeerInfo};
+use moush_core::net::{Outgoing, PeerInfo, PeerSender};
 use moush_core::pairing::PairingBroker;
-use moush_core::protocol::{key_flags, Message, MonitorDesc, MouseButton};
+use moush_core::protocol::{MAX_FEATURE_BODY, Message, MonitorDesc, MouseButton, key_flags};
 use moush_core::stats::{LatencyRing, Stats};
 use moush_core::trust::TrustStore;
 use moush_core::util::mono_us;
@@ -48,6 +50,8 @@ impl Injector for Recorder {
 struct HostSide {
     connected: Mutex<Sender<ClientHandle>>,
     gone: Mutex<Sender<String>>,
+    features: Mutex<Sender<(u8, Vec<u8>)>>,
+    caps: Mutex<Sender<u32>>,
 }
 
 impl HostEvents for HostSide {
@@ -58,11 +62,43 @@ impl HostEvents for HostSide {
     fn client_disconnected(&self, id: &str, _: u64, _: &str) {
         let _ = self.gone.lock().unwrap().send(id.to_owned());
     }
+    fn client_capabilities(&self, _: &str, _: u64, features: u32) {
+        let _ = self.caps.lock().unwrap().send(features);
+    }
+    fn client_feature(&self, _: &str, _: u64, channel: u8, body: Vec<u8>) {
+        let _ = self.features.lock().unwrap().send((channel, body));
+    }
+}
+
+/// Client events that expose the session's sender and record feature traffic.
+struct FeatureEvents {
+    sender: Mutex<Option<PeerSender>>,
+    features: Mutex<Sender<(u8, Vec<u8>)>>,
+    caps: Mutex<Sender<u32>>,
+}
+
+impl ClientEvents for FeatureEvents {
+    fn connected(&self, _: &PeerInfo, sender: &PeerSender) {
+        *self.sender.lock().unwrap() = Some(sender.clone());
+    }
+    fn active_changed(&self, _: bool) {}
+    fn capabilities(&self, features: u32) {
+        let _ = self.caps.lock().unwrap().send(features);
+    }
+    fn feature(&self, channel: u8, body: Vec<u8>) {
+        // Acknowledge bulk chunks the way real features do (flow control).
+        if channel == 2
+            && let Some(s) = &*self.sender.lock().unwrap()
+        {
+            s.try_send_feature(3, (body.len() as u32).to_le_bytes().to_vec());
+        }
+        let _ = self.features.lock().unwrap().send((channel, body));
+    }
 }
 
 struct NoEvents;
 impl ClientEvents for NoEvents {
-    fn connected(&self, _: &PeerInfo) {}
+    fn connected(&self, _: &PeerInfo, _: &moush_core::net::PeerSender) {}
     fn active_changed(&self, _: bool) {}
 }
 
@@ -96,6 +132,8 @@ struct Rig {
     host: HostServer,
     connected: Receiver<ClientHandle>,
     gone: Receiver<String>,
+    host_features: Receiver<(u8, Vec<u8>)>,
+    host_caps: Receiver<u32>,
     host_trust: Arc<TrustStore>,
     client_trust: Arc<TrustStore>,
     client_id: Identity,
@@ -105,6 +143,8 @@ struct Rig {
 fn rig(host_answer: bool) -> Rig {
     let (ctx, crx) = mpsc::channel();
     let (gtx, grx) = mpsc::channel();
+    let (ftx, frx) = mpsc::channel();
+    let (captx, caprx) = mpsc::channel();
     let host_trust = Arc::new(TrustStore::ephemeral());
     let stats = Arc::new(Stats::new());
     let host = HostServer::start(
@@ -114,13 +154,20 @@ fn rig(host_answer: bool) -> Rig {
         host_trust.clone(),
         auto_broker(host_answer),
         stats.clone(),
-        Arc::new(HostSide { connected: Mutex::new(ctx), gone: Mutex::new(gtx) }),
+        Arc::new(HostSide {
+            connected: Mutex::new(ctx),
+            gone: Mutex::new(gtx),
+            features: Mutex::new(ftx),
+            caps: Mutex::new(captx),
+        }),
     )
     .unwrap();
     Rig {
         host,
         connected: crx,
         gone: grx,
+        host_features: frx,
+        host_caps: caprx,
         host_trust,
         client_trust: Arc::new(TrustStore::ephemeral()),
         client_id: Identity::generate().unwrap(),
@@ -129,7 +176,20 @@ fn rig(host_answer: bool) -> Rig {
 }
 
 /// Starts a client session on a thread; returns its injected events and final result.
-fn start_client(rig: &Rig, stop: Arc<AtomicBool>, link: Arc<ClientLink>) -> (Receiver<(Ev, u64)>, thread::JoinHandle<SessionEnd>) {
+fn start_client(
+    rig: &Rig,
+    stop: Arc<AtomicBool>,
+    link: Arc<ClientLink>,
+) -> (Receiver<(Ev, u64)>, thread::JoinHandle<SessionEnd>) {
+    start_client_with(rig, stop, link, Arc::new(NoEvents))
+}
+
+fn start_client_with(
+    rig: &Rig,
+    stop: Arc<AtomicBool>,
+    link: Arc<ClientLink>,
+    client_events: Arc<dyn ClientEvents + Send + Sync>,
+) -> (Receiver<(Ev, u64)>, thread::JoinHandle<SessionEnd>) {
     let (etx, erx) = mpsc::channel();
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, rig.host.port()));
     let id = rig.client_id.clone();
@@ -152,7 +212,7 @@ fn start_client(rig: &Rig, stop: Arc<AtomicBool>, link: Arc<ClientLink>) -> (Rec
             },
             &mut inject,
             &link,
-            &NoEvents,
+            client_events.as_ref(),
         )
     });
     (erx, h)
@@ -253,7 +313,10 @@ fn latency_over_loopback() {
         let down = i % 2 == 0;
         client
             .outbox
-            .send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } }, t_us: t })
+            .send(Outgoing {
+                msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } },
+                t_us: t,
+            })
             .unwrap();
         let (_, at) = events.recv_timeout(Duration::from_secs(5)).unwrap();
         ring.record(at.saturating_sub(t) as u32);
@@ -275,4 +338,106 @@ fn latency_over_loopback() {
     stop.store(true, Ordering::SeqCst);
     link.close();
     session.join().unwrap();
+}
+
+#[test]
+fn feature_traffic_flows_both_ways_without_starving_input() {
+    let rig = rig(true);
+    let link = ClientLink::new();
+    let stop = Arc::new(AtomicBool::new(false));
+    let (ftx, frx) = mpsc::channel();
+    let (ctx, crx) = mpsc::channel();
+    let fe = Arc::new(FeatureEvents { sender: Mutex::new(None), features: Mutex::new(ftx), caps: Mutex::new(ctx) });
+    let (events, session) = start_client_with(&rig, stop.clone(), link.clone(), fe.clone());
+    let client = rig.connected.recv_timeout(Duration::from_secs(10)).unwrap();
+    // The host can see the connection before the client thread reports it.
+    let waited = Instant::now();
+    let to_host = loop {
+        if let Some(s) = fe.sender.lock().unwrap().clone() {
+            break s;
+        }
+        assert!(waited.elapsed() < Duration::from_secs(5), "client sender");
+        thread::sleep(Duration::from_millis(2));
+    };
+
+    // Capabilities in both directions.
+    assert!(client.sender.send_control(Message::Capabilities { features: 0b11 }));
+    assert!(to_host.send_control(Message::Capabilities { features: 0b10 }));
+    assert_eq!(crx.recv_timeout(Duration::from_secs(5)).unwrap(), 0b11);
+    assert_eq!(rig.host_caps.recv_timeout(Duration::from_secs(5)).unwrap(), 0b10);
+
+    // Client -> host feature message.
+    assert!(to_host.send_feature(1, b"hello host".to_vec(), Duration::from_secs(1)));
+    assert_eq!(rig.host_features.recv_timeout(Duration::from_secs(5)).unwrap(), (1, b"hello host".to_vec()));
+
+    // Host streams 8 MB of maximum-size chunks, flow-controlled by the client's acks,
+    // while input keeps flowing.
+    client.outbox.send(Outgoing::now(Message::Enter { x: 0, y: 0 })).unwrap();
+    recv_ev(&events);
+    const CHUNKS: usize = 256;
+    let window = Arc::new(Window::new(128 * 1024));
+    let acks = {
+        let window = window.clone();
+        let host_features = rig.host_features;
+        thread::spawn(move || {
+            let mut acked = 0;
+            while acked < CHUNKS * MAX_FEATURE_BODY {
+                let (ch, body) = host_features.recv_timeout(Duration::from_secs(10)).expect("ack");
+                assert_eq!(ch, 3);
+                let n = u32::from_le_bytes(body[..4].try_into().unwrap()) as usize;
+                window.release(n);
+                acked += n;
+            }
+        })
+    };
+    let sender = client.sender.clone();
+    let started = Instant::now();
+    let bulk = {
+        let window = window.clone();
+        thread::spawn(move || {
+            for i in 0..CHUNKS {
+                let mut body = vec![(i % 251) as u8; MAX_FEATURE_BODY];
+                body[..4].copy_from_slice(&(i as u32).to_le_bytes());
+                assert_eq!(window.acquire(body.len(), Duration::from_secs(10)), Acquire::Ok);
+                assert!(sender.send_feature(2, body, Duration::from_secs(10)), "chunk {i} queued");
+            }
+        })
+    };
+    let mut ring = LatencyRing::default();
+    for i in 0..200u32 {
+        let t = mono_us();
+        let down = i % 2 == 0;
+        client
+            .outbox
+            .send(Outgoing {
+                msg: Message::Key { vk: 0x41, scan: 0x1e, flags: if down { key_flags::DOWN } else { 0 } },
+                t_us: t,
+            })
+            .unwrap();
+        let (_, at) = events.recv_timeout(Duration::from_secs(5)).unwrap();
+        ring.record(at.saturating_sub(t) as u32);
+        thread::sleep(Duration::from_micros(500));
+    }
+    bulk.join().unwrap();
+    acks.join().unwrap();
+    let mb_s = (CHUNKS * MAX_FEATURE_BODY) as f64 / started.elapsed().as_secs_f64() / 1e6;
+    for i in 0..CHUNKS {
+        let (ch, body) = frx.recv_timeout(Duration::from_secs(10)).expect("chunk arrives");
+        assert_eq!(ch, 2);
+        assert_eq!(body.len(), MAX_FEATURE_BODY);
+        assert_eq!(u32::from_le_bytes(body[..4].try_into().unwrap()), i as u32, "chunks arrive in order");
+    }
+    let s = ring.summary();
+    println!(
+        "input latency during an 8 MB bulk stream: p50 {:.0} us, p95 {:.0} us, max {:.0} us; bulk throughput {mb_s:.0} MB/s",
+        s.p50, s.p95, s.max
+    );
+    // Unoptimized ChaCha dominates debug builds; the real bound is checked in release.
+    let bound = if cfg!(debug_assertions) { 200_000.0 } else { 2_000.0 };
+    assert!(s.p50 < bound, "input keeps flowing during bulk transfers");
+
+    stop.store(true, Ordering::SeqCst);
+    link.close();
+    session.join().unwrap();
+    assert!(!client.sender.try_send_feature(1, vec![1]), "sender is inert after disconnect");
 }

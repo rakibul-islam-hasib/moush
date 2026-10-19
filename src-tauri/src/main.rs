@@ -2,9 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod clipboard_cmds;
 mod commands;
 mod dto;
+mod notify;
 mod settings;
+mod transfer_cmds;
 mod tray;
 
 use std::sync::Arc;
@@ -46,12 +49,31 @@ fn main() {
             commands::discover_hosts,
             commands::respond_pairing,
             commands::forget_device,
+            commands::set_device_policy,
+            commands::reset_settings,
             commands::get_diagnostics,
             commands::get_logs,
             commands::run_latency_test,
             commands::open_firewall_setup,
             commands::open_log_folder,
             commands::quit_app,
+            clipboard_cmds::get_clipboard_history,
+            clipboard_cmds::copy_clipboard_entry,
+            clipboard_cmds::delete_clipboard_entry,
+            clipboard_cmds::clear_clipboard_history,
+            clipboard_cmds::share_text,
+            clipboard_cmds::copy_shared_text,
+            clipboard_cmds::open_shared_link,
+            clipboard_cmds::dismiss_shared_text,
+            transfer_cmds::send_files,
+            transfer_cmds::pick_files,
+            transfer_cmds::pick_folder,
+            transfer_cmds::respond_transfer,
+            transfer_cmds::cancel_transfer,
+            transfer_cmds::retry_transfer,
+            transfer_cmds::clear_finished_transfers,
+            transfer_cmds::open_transfer_location,
+            transfer_cmds::default_download_dir,
         ])
         .setup(move |tauri_app| {
             let handle = tauri_app.handle().clone();
@@ -138,15 +160,33 @@ fn create_main_window(app: &AppHandle) {
         }
     };
     if let Some(state) = app.try_state::<Arc<App>>() {
-        // Native Mica backdrop on Windows 11; Windows 10 keeps an opaque window.
-        if state.platform.lock().unwrap().windows11 {
-            let ok = window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok();
-            state.platform.lock().unwrap().mica = ok;
-        }
+        // A new window starts without effects; apply Mica when the setting asks for it.
+        state.platform.lock().unwrap().mica = false;
+        apply_backdrop(app);
         apply_theme(app, &state.config().settings.theme);
     }
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+/// Applies or clears the native Mica backdrop to match `settings.appearance.transparency`
+/// (Windows 11 only; Windows 10 keeps an opaque window). `platform.mica` reports whether
+/// the backdrop is currently applied, so the UI only draws translucent surfaces over it.
+pub fn apply_backdrop(app: &AppHandle) {
+    let Some(state) = app.try_state::<Arc<App>>() else { return };
+    let Some(window) = app.get_webview_window("main") else { return };
+    let want = state.platform.lock().unwrap().windows11 && state.config().settings.appearance.transparency;
+    if want == state.platform.lock().unwrap().mica {
+        return;
+    }
+    let applied = if want {
+        window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build()).is_ok()
+    } else {
+        let _ = window.set_effects(None::<tauri::utils::config::WindowEffectsConfig>);
+        false
+    };
+    state.platform.lock().unwrap().mica = applied;
+    state.notify();
 }
 
 pub fn apply_theme(app: &AppHandle, theme: &str) {

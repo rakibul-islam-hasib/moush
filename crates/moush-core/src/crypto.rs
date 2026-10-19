@@ -118,7 +118,13 @@ impl SecureChannel {
 
     pub fn split<R: Read, W: Write>(self, r: R, w: W) -> (FrameReader<R>, FrameWriter<W>) {
         (
-            FrameReader { r, t: self.transport.clone(), nonce: 0, ct: vec![0; MAX_NOISE_MSG], pt: vec![0; MAX_NOISE_MSG] },
+            FrameReader {
+                r,
+                t: self.transport.clone(),
+                nonce: 0,
+                ct: vec![0; MAX_NOISE_MSG],
+                pt: vec![0; MAX_NOISE_MSG],
+            },
             FrameWriter { w, t: self.transport, nonce: 0, buf: Vec::with_capacity(512) },
         )
     }
@@ -131,8 +137,10 @@ fn builder() -> io::Result<Builder<'static>> {
 
 /// Runs the Noise XX handshake. The caller sets socket timeouts beforehand.
 pub fn handshake<S: Read + Write>(stream: &mut S, identity: &Identity, initiator: bool) -> io::Result<SecureChannel> {
-    let b = builder()?.prologue(PROLOGUE).map_err(noise_err)?.local_private_key(&identity.private).map_err(noise_err)?;
-    let mut hs: HandshakeState = if initiator { b.build_initiator() } else { b.build_responder() }.map_err(noise_err)?;
+    let b =
+        builder()?.prologue(PROLOGUE).map_err(noise_err)?.local_private_key(&identity.private).map_err(noise_err)?;
+    let mut hs: HandshakeState =
+        if initiator { b.build_initiator() } else { b.build_responder() }.map_err(noise_err)?;
     let mut msg = vec![0u8; MAX_NOISE_MSG];
     let mut payload = vec![0u8; MAX_NOISE_MSG];
     // XX: -> e ; <- e, ee, s, es ; -> s, se

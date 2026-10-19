@@ -11,17 +11,19 @@ use std::time::{Duration, Instant};
 use moush_core::crypto::Identity;
 use moush_core::discovery;
 use moush_core::inject::{InjectState, Injector};
-use moush_core::net::client::{run_session, ClientEvents, ClientLink, SessionConfig, SessionEnd};
-use moush_core::net::PeerInfo;
+use moush_core::net::client::{ClientEvents, ClientLink, SessionConfig, SessionEnd, run_session};
+use moush_core::net::{PeerInfo, PeerSender};
 use moush_core::pairing::PairingBroker;
 use moush_core::protocol::{MonitorDesc, MouseButton, WheelAxis};
 use moush_core::stats::{LatencySummary, Stats};
 use moush_core::trust::TrustStore;
 use moush_core::util::now_ms;
 
+use crate::features::FeatureHub;
 use crate::host::Notify;
 use crate::win::display_watch::DisplayWatcher;
 use crate::win::dpi::make_thread_dpi_aware;
+use crate::win::focus::FocusWorker;
 use crate::win::inject::SendInputInjector;
 use crate::win::monitors;
 
@@ -64,6 +66,9 @@ pub struct ClientOptions {
     pub auto_reconnect: bool,
     /// Log input instead of injecting it (testing on one machine).
     pub dry_run: bool,
+    /// When the shared cursor enters, bring the window under it to the front.
+    /// Can be changed while running with [`ClientEngine::set_focus_on_enter`].
+    pub focus_on_enter: bool,
 }
 
 struct Shared {
@@ -73,6 +78,13 @@ struct Shared {
     lost_at: Mutex<Option<Instant>>,
     /// Called with the address of every successful connection (to remember it).
     on_connected: Box<dyn Fn(&str) + Send + Sync>,
+    hub: Arc<FeatureHub>,
+    /// (host id, connection number) of the current session, for the feature hub.
+    session: Mutex<Option<(String, u64)>>,
+    sessions: std::sync::atomic::AtomicU64,
+    focus_on_enter: AtomicBool,
+    /// None in dry-run mode (nothing is injected, so nothing is focused either).
+    focus: Option<FocusWorker>,
 }
 
 impl Shared {
@@ -83,7 +95,10 @@ impl Shared {
 }
 
 impl ClientEvents for Shared {
-    fn connected(&self, host: &PeerInfo) {
+    fn connected(&self, host: &PeerInfo, sender: &PeerSender) {
+        let conn_no = self.sessions.fetch_add(1, Ordering::SeqCst) + 1;
+        *self.session.lock().unwrap() = Some((host.id.clone(), conn_no));
+        self.hub.peer_up(&host.id, &host.name, conn_no, sender.clone());
         if let Some(t) = self.lost_at.lock().unwrap().take() {
             Stats::add(&self.stats.reconnects, 1);
             self.stats.last_reconnect_ms.store(t.elapsed().as_millis() as u64, Ordering::Relaxed);
@@ -100,8 +115,36 @@ impl ClientEvents for Shared {
     }
 
     fn active_changed(&self, active: bool) {
-        log::info!("{}", if active { "shared cursor entered this computer" } else { "shared cursor left this computer" });
+        log::info!(
+            "{}",
+            if active { "shared cursor entered this computer" } else { "shared cursor left this computer" }
+        );
+        if active
+            && self.focus_on_enter.load(Ordering::Relaxed)
+            && let Some(f) = &self.focus
+        {
+            f.request(); // never blocks: the work happens on the focus thread
+        }
         self.update(|v| v.active = active);
+    }
+
+    fn disconnected(&self) {
+        if let Some((id, conn_no)) = self.session.lock().unwrap().take() {
+            self.hub.peer_down(&id, conn_no);
+        }
+    }
+
+    fn capabilities(&self, features: u32) {
+        if let Some((id, conn_no)) = self.session.lock().unwrap().clone() {
+            self.hub.on_capabilities(&id, conn_no, features);
+        }
+    }
+
+    fn feature(&self, channel: u8, body: Vec<u8>) {
+        let session = self.session.lock().unwrap().clone();
+        if let Some((id, conn_no)) = session {
+            self.hub.on_feature(&id, conn_no, channel, body);
+        }
     }
 }
 
@@ -123,6 +166,7 @@ impl ClientEngine {
         trust: Arc<TrustStore>,
         broker: Arc<PairingBroker>,
         stats: Arc<Stats>,
+        hub: Arc<FeatureHub>,
         notify: Notify,
         on_connected: impl Fn(&str) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
@@ -147,6 +191,21 @@ impl ClientEngine {
             stats: stats.clone(),
             lost_at: Mutex::new(None),
             on_connected: Box::new(on_connected),
+            hub,
+            session: Mutex::new(None),
+            sessions: std::sync::atomic::AtomicU64::new(0),
+            focus_on_enter: AtomicBool::new(opts.focus_on_enter),
+            focus: if opts.dry_run {
+                None
+            } else {
+                match FocusWorker::start() {
+                    Ok(f) => Some(f),
+                    Err(e) => {
+                        log::warn!("focus on enter unavailable: {e}");
+                        None
+                    }
+                }
+            },
         });
         let link = ClientLink::new();
         let stop = Arc::new(AtomicBool::new(false));
@@ -169,7 +228,18 @@ impl ClientEngine {
             }
         };
 
-        let ctx = Worker { target, opts, identity, trust, broker, stats, shared: shared.clone(), link: link.clone(), stop: stop.clone(), wake: wake_rx };
+        let ctx = Worker {
+            target,
+            opts,
+            identity,
+            trust,
+            broker,
+            stats,
+            shared: shared.clone(),
+            link: link.clone(),
+            stop: stop.clone(),
+            wake: wake_rx,
+        };
         let thread = thread::Builder::new().name("client".into()).spawn(move || ctx.run())?;
         Ok(Self { shared, link, stop, wake: wake_tx, thread: Some(thread), _watcher: watcher })
     }
@@ -180,6 +250,11 @@ impl ClientEngine {
 
     pub fn rtt_ms(&self) -> Option<f64> {
         self.link.rtt_ms()
+    }
+
+    /// Applies the "focus on enter" option immediately (next time the cursor enters).
+    pub fn set_focus_on_enter(&self, on: bool) {
+        self.shared.focus_on_enter.store(on, Ordering::Relaxed);
     }
 
     /// Cancels a pairing that is waiting for the host (closes the connection attempt).
@@ -237,7 +312,11 @@ impl Injector for DryRunInjector {
         true
     }
     fn key(&mut self, vk: u16, scan: u16, ext: bool, down: bool, _by_vk: bool) -> bool {
-        log::info!("[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}", if ext { " ext" } else { "" }, if down { "down" } else { "up" });
+        log::debug!(
+            "[dry-run] key vk=0x{vk:02x} scan=0x{scan:02x}{} {}",
+            if ext { " ext" } else { "" },
+            if down { "down" } else { "up" }
+        );
         true
     }
 }
@@ -290,7 +369,11 @@ struct Worker {
 impl Worker {
     fn run(self) {
         make_thread_dpi_aware();
-        let injector = if self.opts.dry_run { AnyInjector::Dry(DryRunInjector) } else { AnyInjector::Real(SendInputInjector::new()) };
+        let injector = if self.opts.dry_run {
+            AnyInjector::Dry(DryRunInjector)
+        } else {
+            AnyInjector::Real(SendInputInjector::new())
+        };
         let mut inject = InjectState::new(injector);
         // Once connected, we know who the host is: later attempts must reach the same device.
         let mut known_host = match &self.target {
@@ -414,11 +497,7 @@ impl Worker {
 }
 
 fn discover(id: &str) -> Option<SocketAddr> {
-    discovery::scan(Duration::from_millis(700))
-        .ok()?
-        .into_iter()
-        .find(|f| f.announce.id == id)
-        .map(|f| f.addr)
+    discovery::scan(Duration::from_millis(700)).ok()?.into_iter().find(|f| f.announce.id == id).map(|f| f.addr)
 }
 
 /// Parses "host", "host:port", "1.2.3.4", "[::1]:24800". Prefers IPv4.
@@ -436,7 +515,8 @@ pub fn parse_address(s: &str, default_port: u16) -> Result<SocketAddr, String> {
     } else {
         format!("{s}:{default_port}")
     };
-    let addrs: Vec<SocketAddr> = with_port.to_socket_addrs().map_err(|e| format!("cannot resolve \"{s}\": {e}"))?.collect();
+    let addrs: Vec<SocketAddr> =
+        with_port.to_socket_addrs().map_err(|e| format!("cannot resolve \"{s}\": {e}"))?.collect();
     addrs
         .iter()
         .find(|a| a.is_ipv4())

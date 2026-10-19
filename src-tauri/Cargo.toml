@@ -17,5 +17,7 @@ moush-engine.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tauri = { version = "2.12", features = ["tray-icon"] }
+# Default features minus `dynamic-acl` (runtime capability changes, unused: -0.3 MB) and
+# the Linux-only `x11`/`dbus`. Keep `compression`: the brotli decoder costs less than it saves.
+tauri = { version = "2.12", default-features = false, features = ["wry", "common-controls-v6", "compression", "tray-icon"] }
 tauri-plugin-single-instance = "2.5"

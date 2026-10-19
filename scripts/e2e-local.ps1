@@ -54,7 +54,7 @@ public static class In {
 function Pos { $p = New-Object In+POINT; [In]::GetCursorPos([ref]$p) | Out-Null; $p }
 function Identity($dir) {
   $ErrorActionPreference = "Continue"   # the CLI logs to stderr; that is not a failure
-  $o = & "$Bin\moush.exe" identity --config-dir $dir 2>$null
+  $o = & "$Bin\moush-cli.exe" identity --config-dir $dir 2>$null
   @{ id = ($o -match '^id')[0].Split(' ', [StringSplitOptions]::RemoveEmptyEntries)[1];
      key = ($o -match '^public key')[0].Split(' ', [StringSplitOptions]::RemoveEmptyEntries)[2] }
 }
@@ -74,7 +74,7 @@ $env:APPDATA = "$work\roam"; $env:LOCALAPPDATA = "$work\local"; $env:MOUSH_TEST_
 $gui = Start-Process "$Bin\Moush.exe" -PassThru -ArgumentList "--minimized"
 Remove-Item Env:\MOUSH_TEST_ACCEPT_INJECTED
 Start-Sleep -Seconds 3
-$cli = Start-Process "$Bin\moush.exe" -PassThru -WindowStyle Hidden `
+$cli = Start-Process "$Bin\moush-cli.exe" -PassThru -WindowStyle Hidden `
   -ArgumentList "client", "127.0.0.1", "--port", "$Port", "--dry-run", "--verbose", "--config-dir", "`"$cliCfg`"" `
   -RedirectStandardError "$work\client.log" -RedirectStandardOutput "$work\client.out"
 Start-Sleep -Seconds 2

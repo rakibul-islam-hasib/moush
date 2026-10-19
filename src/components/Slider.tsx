@@ -10,9 +10,10 @@ interface SliderProps {
   labelledBy?: string;
   describedBy?: string;
   id?: string;
+  disabled?: boolean;
 }
 
-export function Slider({ value, min, max, step, onChange, format, labelledBy, describedBy, id }: SliderProps) {
+export function Slider({ value, min, max, step, onChange, format, labelledBy, describedBy, id, disabled }: SliderProps) {
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   const style: CSSProperties & Record<"--pct", string> = { "--pct": `${pct}%` };
   return (
@@ -28,6 +29,7 @@ export function Slider({ value, min, max, step, onChange, format, labelledBy, de
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         style={style}
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}

@@ -89,7 +89,13 @@ impl LayoutStore {
                 true
             }
             None => {
-                self.clients.push(SavedClient { id: id.to_owned(), name: name.to_owned(), x: None, y: None, monitors: saved });
+                self.clients.push(SavedClient {
+                    id: id.to_owned(),
+                    name: name.to_owned(),
+                    x: None,
+                    y: None,
+                    monitors: saved,
+                });
                 true
             }
         }
@@ -127,7 +133,8 @@ pub struct ClientView {
 }
 
 fn screen_of(monitors: &[MonitorDesc]) -> Screen {
-    let mut rects: Vec<(bool, Rect)> = monitors.iter().map(|m| (m.primary, Rect::new(m.x, m.y, m.width, m.height))).collect();
+    let mut rects: Vec<(bool, Rect)> =
+        monitors.iter().map(|m| (m.primary, Rect::new(m.x, m.y, m.width, m.height))).collect();
     rects.sort_by_key(|(p, r)| (!*p, r.x, r.y));
     Screen::new(rects.into_iter().map(|(_, r)| r).collect())
 }
@@ -210,8 +217,20 @@ mod tests {
 
     fn host() -> Vec<Monitor> {
         vec![
-            Monitor { device: "1".into(), name: "M1".into(), rect: Rect::new(0, 0, 2560, 1440), dpi: 96, primary: true },
-            Monitor { device: "2".into(), name: "M2".into(), rect: Rect::new(2560, 0, 2560, 1440), dpi: 96, primary: false },
+            Monitor {
+                device: "1".into(),
+                name: "M1".into(),
+                rect: Rect::new(0, 0, 2560, 1440),
+                dpi: 96,
+                primary: true,
+            },
+            Monitor {
+                device: "2".into(),
+                name: "M2".into(),
+                rect: Rect::new(2560, 0, 2560, 1440),
+                dpi: 96,
+                primary: false,
+            },
         ]
     }
 

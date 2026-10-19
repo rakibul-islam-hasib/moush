@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::{device_id, fingerprint, hex, unhex};
+use crate::features::DevicePolicy;
 use crate::util::now_ms;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +28,9 @@ pub struct TrustedPeer {
     pub paired_at: u64,
     pub last_seen: Option<u64>,
     pub last_address: Option<String>,
+    /// Which optional features this device may use with us.
+    #[serde(default)]
+    pub policy: DevicePolicy,
 }
 
 impl TrustedPeer {
@@ -90,6 +94,7 @@ impl TrustStore {
                 paired_at: now_ms(),
                 last_seen: Some(now_ms()),
                 last_address: address,
+                policy: DevicePolicy::default(),
             });
         }
         self.save()
@@ -107,6 +112,22 @@ impl TrustStore {
             }
         }
         self.save()
+    }
+
+    /// Changes what a paired device may do. Returns false if it is not paired.
+    pub fn set_policy(&self, id: &str, policy: DevicePolicy) -> io::Result<bool> {
+        {
+            let mut peers = self.peers.lock().unwrap();
+            let Some(p) = peers.iter_mut().find(|p| p.id == id) else { return Ok(false) };
+            p.policy = policy;
+        }
+        self.save()?;
+        Ok(true)
+    }
+
+    /// The device's policy; devices that are not paired get nothing.
+    pub fn policy(&self, id: &str) -> Option<DevicePolicy> {
+        self.peers.lock().unwrap().iter().find(|p| p.id == id).map(|p| p.policy)
     }
 
     pub fn remove(&self, id: &str) -> io::Result<bool> {
@@ -151,6 +172,11 @@ mod tests {
         let t = TrustStore::load(path.clone()).unwrap();
         assert!(t.is_trusted(&key));
         assert_eq!(t.list()[0].name, "Laptop");
+        assert_eq!(t.policy(&device_id(&key)), Some(DevicePolicy::default()));
+        let p = DevicePolicy { files: false, ..Default::default() };
+        assert!(t.set_policy(&device_id(&key), p).unwrap());
+        assert_eq!(TrustStore::load(path.clone()).unwrap().policy(&device_id(&key)), Some(p));
+        assert!(!t.set_policy("0000000000000000", p).unwrap());
         assert!(t.remove(&device_id(&key)).unwrap());
         assert!(!TrustStore::load(path).unwrap().is_trusted(&key));
         let _ = fs::remove_dir_all(dir);

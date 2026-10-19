@@ -10,10 +10,11 @@ use std::thread;
 use std::time::Duration;
 
 use super::{
-    hello_and_authorize, handle_keepalive, run_writer, split_channel, try_send, AuthCtx, AuthError, ConnShared, Outbox,
-    Outgoing, PeerInfo, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, WRITE_TIMEOUT,
+    AuthCtx, AuthError, BulkGate, ConnShared, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, Outbox, Outgoing, PeerInfo,
+    PeerSender, SETUP_DEADLINE, SetupDeadline, WRITE_TIMEOUT, handle_keepalive, hello_and_authorize, run_writer,
+    split_channel, try_send,
 };
-use crate::crypto::{handshake, Identity};
+use crate::crypto::{Identity, handshake};
 use crate::inject::{InjectState, Injector};
 use crate::pairing::PairingBroker;
 use crate::protocol::{Message, MonitorDesc, PeerRole};
@@ -25,10 +26,18 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 /// Goodbye reason the host uses when the user disconnects a client on purpose.
 pub const BYE_KICKED: &str = "disconnected by the host";
 
-/// Notifications from a running session. Must not block.
+/// Notifications from a running session. Must not block: they run on the thread that
+/// injects input.
 pub trait ClientEvents: Send + Sync {
-    fn connected(&self, host: &PeerInfo);
+    /// The session is up; `sender` carries feature and control traffic to the host.
+    fn connected(&self, host: &PeerInfo, sender: &PeerSender);
     fn active_changed(&self, active: bool);
+    /// The session that `connected` announced has ended.
+    fn disconnected(&self) {}
+    /// The host announced which optional features it allows.
+    fn capabilities(&self, _features: u32) {}
+    /// Feature traffic from the host.
+    fn feature(&self, _channel: u8, _body: Vec<u8>) {}
 }
 
 /// Handle to the current session for other threads (UI, display-change watcher).
@@ -137,10 +146,14 @@ pub fn run_session<I: Injector>(
         Err(e) => return SessionEnd::Lost(e.to_string()),
     };
     let (tx, rx) = sync_channel::<Outgoing>(OUTBOX_CAPACITY);
+    let gate = Arc::new(BulkGate::default());
     {
         let shared = shared.clone();
         let stats = cfg.stats.clone();
-        if let Err(e) = thread::Builder::new().name("client-tx".into()).spawn(move || run_writer(w, rx, shared, stats, false)) {
+        let gate = gate.clone();
+        if let Err(e) =
+            thread::Builder::new().name("client-tx".into()).spawn(move || run_writer(w, rx, shared, gate, stats, false))
+        {
             return SessionEnd::Lost(format!("cannot start writer: {e}"));
         }
     }
@@ -149,7 +162,7 @@ pub fn run_session<I: Injector>(
         shared.close();
     }
     log::info!("connected to {} at {}", peer.name, cfg.addr);
-    events.connected(&peer);
+    events.connected(&peer, &PeerSender::new(tx.clone(), gate, shared.clone()));
 
     let end = loop {
         let (batch, t0) = match r.read_batch() {
@@ -192,6 +205,8 @@ pub fn run_session<I: Injector>(
                     input = true;
                 }
                 Message::Bye { reason } => bye = Some(reason.clone()),
+                Message::Capabilities { features } => events.capabilities(*features),
+                Message::Feature { channel, body } => events.feature(*channel, body.clone()),
                 other => violation = Some(format!("{other:?}")),
             }
         }
@@ -213,15 +228,21 @@ pub fn run_session<I: Injector>(
     if was_active {
         events.active_changed(false);
     }
+    events.disconnected();
     end
 }
 
-fn setup(stream: &mut TcpStream, cfg: &SessionConfig<'_>) -> Result<(PeerInfo, super::MsgReader, super::MsgWriter), SessionEnd> {
+fn setup(
+    stream: &mut TcpStream,
+    cfg: &SessionConfig<'_>,
+) -> Result<(PeerInfo, super::MsgReader, super::MsgWriter), SessionEnd> {
     let lost = |e: io::Error| SessionEnd::Lost(e.to_string());
     stream.set_nodelay(true).map_err(lost)?;
     stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
     stream.set_write_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(lost)?;
-    let ch = handshake(stream, cfg.identity, true).map_err(|e| SessionEnd::Lost(format!("secure handshake failed: {e}")))?;
+    let deadline = SetupDeadline::arm(stream, SETUP_DEADLINE).map_err(lost)?;
+    let ch =
+        handshake(stream, cfg.identity, true).map_err(|e| SessionEnd::Lost(format!("secure handshake failed: {e}")))?;
     let remote = *ch.remote_static();
     let remote_id = crate::crypto::device_id(&remote);
     if let Some(expected) = &cfg.expected_host
@@ -234,7 +255,15 @@ fn setup(stream: &mut TcpStream, cfg: &SessionConfig<'_>) -> Result<(PeerInfo, s
     }
     let code = ch.verification_code();
     let (mut r, w) = split_channel(ch, stream, cfg.stats).map_err(lost)?;
-    let auth = AuthCtx { trust: cfg.trust, broker: cfg.broker, my_role: PeerRole::Client, my_name: cfg.name, code };
+    let auth = AuthCtx {
+        trust: cfg.trust,
+        broker: cfg.broker,
+        my_role: PeerRole::Client,
+        my_name: cfg.name,
+        code,
+        deadline: Some(&deadline),
+        on_hello: None,
+    };
     let (peer, mut w, newly) = hello_and_authorize(&mut r, w, remote, cfg.addr, &auth).map_err(|e| match e {
         AuthError::Io(e) => SessionEnd::Lost(e.to_string()),
         other => SessionEnd::Fatal(other.to_string()),

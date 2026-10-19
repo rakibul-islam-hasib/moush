@@ -8,9 +8,15 @@
 //! * [`net`] – host server and client sessions over TCP.
 //! * [`discovery`] – LAN discovery over UDP broadcast.
 //! * [`trust`], [`pairing`] – paired devices and pending pairing prompts.
+//! * [`features`], [`flow`] – optional features (clipboard, files) and their flow control.
+//! * [`clipboard`] – clipboard sync and text sharing: clip model, wire format, sync rules.
+//! * [`transfer`] – file transfer wire format, name sanitisation and resume logic.
 
+pub mod clipboard;
 pub mod crypto;
 pub mod discovery;
+pub mod features;
+pub mod flow;
 pub mod geometry;
 pub mod inject;
 pub mod keys;
@@ -19,5 +25,6 @@ pub mod pairing;
 pub mod protocol;
 pub mod router;
 pub mod stats;
+pub mod transfer;
 pub mod trust;
 pub mod util;

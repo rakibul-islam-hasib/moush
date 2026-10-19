@@ -22,14 +22,8 @@
 }
 
 .onboarding-logo {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
   margin-bottom: 8px;
-  border-radius: var(--radius-card);
-  background: var(--accent-subtle);
-  color: var(--accent-text);
+  filter: drop-shadow(0 6px 16px var(--hero-glow));
 }
 
 .role-picker {
@@ -116,95 +110,6 @@
 .onboarding-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-/* ---------------------------------------------------------------- Home */
-
-.status-hero {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px;
-  padding: 20px 24px;
-  border: 1px solid var(--card-stroke);
-  border-radius: var(--radius-card);
-  background: var(--card);
-  background-clip: padding-box;
-}
-
-.status-hero-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--subtle-hover);
-  color: var(--text-secondary);
-}
-
-.status-hero-icon.tone-accent {
-  background: var(--accent-subtle);
-  color: var(--accent-text);
-}
-
-.status-hero-icon.tone-success {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.status-hero-icon.tone-caution {
-  background: var(--caution-bg);
-  color: var(--caution);
-}
-
-.status-hero-icon.tone-critical {
-  background: var(--critical-bg);
-  color: var(--critical);
-}
-
-.status-hero-text {
-  display: flex;
-  flex: 1 1 260px;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.status-hero-title {
-  font-size: var(--fs-subtitle);
-  font-weight: 600;
-  line-height: 28px;
-}
-
-.status-hero-detail {
-  color: var(--text-secondary);
-}
-
-.status-hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.status-facts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.status-facts li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-facts .icon {
-  flex: none;
-  color: var(--text-secondary);
 }
 
 /* ---------------------------------------------------------------- Devices */

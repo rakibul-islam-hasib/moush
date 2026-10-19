@@ -1,5 +1,5 @@
 use windows::Win32::UI::HiDpi::{
-    SetProcessDpiAwarenessContext, SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext, SetThreadDpiAwarenessContext,
 };
 
 /// Makes the process per-monitor DPI aware (v2) so every coordinate is in physical

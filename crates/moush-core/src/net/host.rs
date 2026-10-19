@@ -8,13 +8,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::sync_channel;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::{
-    hello_and_authorize, handle_keepalive, run_writer, split_channel, AuthCtx, ConnShared, Outbox, Outgoing, PeerInfo,
-    HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, WRITE_TIMEOUT,
+    AuthCtx, BulkGate, ConnShared, HANDSHAKE_TIMEOUT, OUTBOX_CAPACITY, Outbox, Outgoing, PeerInfo, PeerSender,
+    SETUP_DEADLINE, SetupDeadline, WRITE_TIMEOUT, handle_keepalive, hello_and_authorize, run_writer, split_channel,
 };
-use crate::crypto::{handshake, Identity};
+use crate::crypto::{Identity, handshake};
 use crate::pairing::PairingBroker;
 use crate::protocol::{Message, MonitorDesc, PeerRole};
 use crate::stats::{LatencySummary, Stats};
@@ -22,7 +22,18 @@ use crate::trust::{TrustRole, TrustStore};
 use crate::util::now_ms;
 
 const MAX_PENDING: usize = 4;
+/// Connections of unpaired devices waiting for a pairing decision at the same time.
+/// They wait up to 90 s and no longer count as pending handshakes, so trusted clients
+/// can always reconnect while someone is pairing.
+const MAX_PAIRING: usize = 2;
 const MAX_CLIENTS: usize = 8;
+/// Screen reports from one client are applied at most this often (see `read_loop`).
+const SCREENS_MIN_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Connection numbers are unique for the whole process, not per server: the feature hub
+/// outlives host servers, and a late disconnect from a stopped server must never match a
+/// connection of the next one.
+static NEXT_CONN: AtomicU64 = AtomicU64::new(1);
 
 /// A client that finished pairing and is ready to receive input.
 #[derive(Clone)]
@@ -32,6 +43,8 @@ pub struct ClientHandle {
     pub addr: SocketAddr,
     pub screens: Vec<MonitorDesc>,
     pub outbox: Outbox,
+    /// Feature and control traffic to this client.
+    pub sender: PeerSender,
     /// Increases with every connection; lets the receiver ignore stale disconnects
     /// after a client reconnected.
     pub conn_no: u64,
@@ -42,6 +55,10 @@ pub trait HostEvents: Send + Sync + 'static {
     fn client_connected(&self, client: ClientHandle);
     fn client_screens(&self, id: &str, conn_no: u64, screens: Vec<MonitorDesc>);
     fn client_disconnected(&self, id: &str, conn_no: u64, reason: &str);
+    /// The client announced which optional features it allows.
+    fn client_capabilities(&self, _id: &str, _conn_no: u64, _features: u32) {}
+    /// Feature traffic from the client (runs on its reader thread).
+    fn client_feature(&self, _id: &str, _conn_no: u64, _channel: u8, _body: Vec<u8>) {}
 }
 
 #[derive(Clone, Debug)]
@@ -70,7 +87,7 @@ struct Ctx {
     events: Arc<dyn HostEvents>,
     clients: Mutex<HashMap<String, Entry>>,
     pending: AtomicUsize,
-    next_conn: AtomicU64,
+    pairing: AtomicUsize,
     stopping: AtomicBool,
 }
 
@@ -108,7 +125,7 @@ impl HostServer {
             events,
             clients: Mutex::new(HashMap::new()),
             pending: AtomicUsize::new(0),
-            next_conn: AtomicU64::new(1),
+            pairing: AtomicUsize::new(0),
             stopping: AtomicBool::new(false),
         });
         let ctx2 = ctx.clone();
@@ -123,10 +140,8 @@ impl HostServer {
 
     pub fn clients(&self) -> Vec<ClientInfo> {
         let clients = self.ctx.clients.lock().unwrap();
-        let mut v: Vec<ClientInfo> = clients
-            .values()
-            .map(|e| ClientInfo { rtt_ms: e.shared.rtt_ms(), ..e.info.clone() })
-            .collect();
+        let mut v: Vec<ClientInfo> =
+            clients.values().map(|e| ClientInfo { rtt_ms: e.shared.rtt_ms(), ..e.info.clone() }).collect();
         v.sort_by(|a, b| a.name.cmp(&b.name));
         v
     }
@@ -135,7 +150,10 @@ impl HostServer {
         let clients = self.ctx.clients.lock().unwrap();
         match clients.get(id) {
             Some(e) => {
-                let _ = super::try_send(&e.outbox, Outgoing::untimed(Message::Bye { reason: super::client::BYE_KICKED.into() }));
+                let _ = super::try_send(
+                    &e.outbox,
+                    Outgoing::untimed(Message::Bye { reason: super::client::BYE_KICKED.into() }),
+                );
                 // Give the writer a moment to flush the goodbye, then close.
                 let shared = e.shared.clone();
                 thread::spawn(move || {
@@ -152,7 +170,8 @@ impl HostServer {
     pub fn latency_test(&self, id: &str, count: u32) -> io::Result<(String, u32, LatencySummary)> {
         let (name, outbox, shared) = {
             let clients = self.ctx.clients.lock().unwrap();
-            let e = clients.get(id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "client is not connected"))?;
+            let e =
+                clients.get(id).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "client is not connected"))?;
             (e.info.name.clone(), e.outbox.clone(), e.shared.clone())
         };
         let (n, s) = super::latency_test(&outbox, &shared, count, Duration::from_millis(10))?;
@@ -168,14 +187,20 @@ impl HostServer {
             return;
         }
         for e in self.ctx.clients.lock().unwrap().values() {
-            let _ = super::try_send(&e.outbox, Outgoing::untimed(Message::Bye { reason: "the host stopped sharing".into() }));
+            let _ = super::try_send(
+                &e.outbox,
+                Outgoing::untimed(Message::Bye { reason: "the host stopped sharing".into() }),
+            );
         }
         thread::sleep(Duration::from_millis(50));
         for e in self.ctx.clients.lock().unwrap().values() {
             e.shared.close();
         }
         // Wake the blocking accept().
-        let _ = TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, self.addr.port())), Duration::from_millis(500));
+        let _ = TcpStream::connect_timeout(
+            &SocketAddr::from((Ipv4Addr::LOCALHOST, self.addr.port())),
+            Duration::from_millis(500),
+        );
         if let Some(t) = self.accept.take() {
             let _ = t.join();
         }
@@ -222,13 +247,12 @@ fn accept_loop(listener: TcpListener, ctx: Arc<Ctx>) {
     }
 }
 
-/// Decrements the pending-handshake counter once, however setup ends.
-struct PendingGuard<'a>(&'a AtomicUsize, bool);
+/// Decrements a slot counter once, however setup ends.
+struct PendingGuard<'a>(&'a AtomicUsize, std::cell::Cell<bool>);
 
 impl PendingGuard<'_> {
-    fn done(&mut self) {
-        if !self.1 {
-            self.1 = true;
+    fn done(&self) {
+        if !self.1.replace(true) {
             self.0.fetch_sub(1, Ordering::SeqCst);
         }
     }
@@ -241,20 +265,47 @@ impl Drop for PendingGuard<'_> {
 }
 
 fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
-    let mut guard = PendingGuard(&ctx.pending, false);
+    let guard = PendingGuard(&ctx.pending, std::cell::Cell::new(false));
+    // Held while this connection waits for a pairing decision.
+    let pairing = PendingGuard(&ctx.pairing, std::cell::Cell::new(true));
     log::info!("connection from {addr}");
     let setup = (|| -> Result<_, String> {
         stream.set_nodelay(true).map_err(|e| e.to_string())?;
         stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(|e| e.to_string())?;
         stream.set_write_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(|e| e.to_string())?;
+        let deadline = SetupDeadline::arm(&stream, SETUP_DEADLINE).map_err(|e| e.to_string())?;
         let ch = handshake(&mut stream, &ctx.identity, false).map_err(|e| format!("handshake failed: {e}"))?;
         let remote = *ch.remote_static();
         let code = ch.verification_code();
         let (mut r, w) = split_channel(ch, &stream, &ctx.stats).map_err(|e| e.to_string())?;
-        let auth = AuthCtx { trust: &ctx.trust, broker: &ctx.broker, my_role: PeerRole::Host, my_name: &ctx.name, code };
+        let admit = |needs_pairing: bool| {
+            if !needs_pairing {
+                return true;
+            }
+            // Move from the pending-handshake slot to a pairing slot.
+            if ctx.pairing.fetch_add(1, Ordering::SeqCst) >= MAX_PAIRING {
+                ctx.pairing.fetch_sub(1, Ordering::SeqCst);
+                log::warn!("refusing pairing from {addr}: {MAX_PAIRING} pairings already in progress");
+                return false;
+            }
+            pairing.1.set(false);
+            guard.done();
+            true
+        };
+        let auth = AuthCtx {
+            trust: &ctx.trust,
+            broker: &ctx.broker,
+            my_role: PeerRole::Host,
+            my_name: &ctx.name,
+            code,
+            deadline: Some(&deadline),
+            on_hello: Some(&admit),
+        };
         let (peer, mut w, newly) = hello_and_authorize(&mut r, w, remote, addr, &auth).map_err(|e| e.to_string())?;
         if newly {
-            ctx.trust.add(&peer.public, &peer.name, TrustRole::Client, Some(addr.to_string())).map_err(|e| e.to_string())?;
+            ctx.trust
+                .add(&peer.public, &peer.name, TrustRole::Client, Some(addr.to_string()))
+                .map_err(|e| e.to_string())?;
             log::info!("paired with {} ({})", peer.name, peer.id);
         } else {
             let _ = ctx.trust.touch(&peer.id, &peer.name, Some(addr.to_string()));
@@ -281,6 +332,7 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         Ok((peer, r, w, screens))
     })();
     guard.done();
+    pairing.done();
     let (peer, mut r, w, screens) = match setup {
         Ok(v) => v,
         Err(e) => {
@@ -297,16 +349,20 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         }
     };
     let (tx, rx) = sync_channel::<Outgoing>(OUTBOX_CAPACITY);
+    let gate = Arc::new(BulkGate::default());
     let writer = {
         let shared = shared.clone();
         let stats = ctx.stats.clone();
-        thread::Builder::new().name(format!("host-tx-{}", peer.name)).spawn(move || run_writer(w, rx, shared, stats, true))
+        let gate = gate.clone();
+        thread::Builder::new()
+            .name(format!("host-tx-{}", peer.name))
+            .spawn(move || run_writer(w, rx, shared, gate, stats, true))
     };
     if writer.is_err() {
         log::error!("cannot spawn writer thread");
         return;
     }
-    let conn_no = ctx.next_conn.fetch_add(1, Ordering::SeqCst);
+    let conn_no = NEXT_CONN.fetch_add(1, Ordering::SeqCst);
     let info = ClientInfo {
         id: peer.id.clone(),
         name: peer.name.clone(),
@@ -331,6 +387,7 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         addr,
         screens,
         outbox: tx.clone(),
+        sender: PeerSender::new(tx.clone(), gate, shared.clone()),
         conn_no,
     });
 
@@ -354,6 +411,18 @@ fn read_loop(
     outbox: &Outbox,
     ctx: &Ctx,
 ) -> String {
+    // Screen reports rebuild the layout on the control thread. A client sends them on
+    // display changes only; a flood is coalesced to the latest report, delivered at most
+    // every SCREENS_MIN_INTERVAL (the next keepalive at the latest).
+    let mut last_screens: Option<Instant> = None;
+    let mut pending_screens: Option<Vec<MonitorDesc>> = None;
+    let deliver = |monitors: Vec<MonitorDesc>| {
+        log::info!("{} reported {} monitor(s)", peer.name, monitors.len());
+        if let Some(e) = ctx.clients.lock().unwrap().get_mut(&peer.id).filter(|e| e.conn_no == conn_no) {
+            e.info.screens = monitors.clone();
+        }
+        ctx.events.client_screens(&peer.id, conn_no, monitors);
+    };
     loop {
         let batch = match r.read_batch() {
             Ok((b, _)) => b.to_vec(),
@@ -367,20 +436,20 @@ fn read_loop(
                 continue;
             }
             match msg {
-                Message::Screens { monitors } => {
-                    log::info!("{} reported {} monitor(s)", peer.name, monitors.len());
-                    if let Some(e) = ctx.clients.lock().unwrap().get_mut(&peer.id) {
-                        e.info.screens = monitors.clone();
-                    }
-                    ctx.events.client_screens(&peer.id, conn_no, monitors);
-                }
+                Message::Screens { monitors } => pending_screens = Some(monitors),
                 Message::Bye { reason } => return format!("client said goodbye: {reason}"),
+                Message::Capabilities { features } => ctx.events.client_capabilities(&peer.id, conn_no, features),
+                Message::Feature { channel, body } => ctx.events.client_feature(&peer.id, conn_no, channel, body),
                 other => {
                     // A client never sends input; anything else is a protocol violation.
                     log::warn!("{} sent unexpected {:?}; disconnecting", peer.name, other);
                     return "protocol violation".into();
                 }
             }
+        }
+        if pending_screens.is_some() && last_screens.is_none_or(|t| t.elapsed() >= SCREENS_MIN_INTERVAL) {
+            last_screens = Some(Instant::now());
+            deliver(pending_screens.take().unwrap_or_default());
         }
     }
 }

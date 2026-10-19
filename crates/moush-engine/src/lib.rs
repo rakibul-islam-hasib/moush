@@ -5,12 +5,15 @@
 compile_error!("moush-engine targets Windows; the platform-independent logic lives in moush-core");
 
 pub mod client;
+pub mod clipboard;
 pub mod discovered;
+pub mod features;
 pub mod host;
 pub mod identity;
 pub mod layout;
 pub mod logger;
 pub mod paths;
+pub mod transfer;
 pub mod win;
 
 pub use moush_core as core;

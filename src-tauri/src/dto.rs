@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use moush_engine::core::features::DevicePolicy;
 use moush_engine::core::stats::LatencySummary;
 use moush_engine::core::trust::TrustRole;
 
@@ -99,6 +100,8 @@ pub struct TrustedDevice {
     pub last_address: Option<String>,
     pub paired_at: u64,
     pub last_seen: Option<u64>,
+    pub policy: DevicePolicy,
+    pub online: bool,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -124,6 +127,111 @@ pub struct AppSnapshot {
     pub pairing: Vec<PairingRequest>,
     pub trusted: Vec<TrustedDevice>,
     pub discovered: Vec<DiscoveredHost>,
+    pub features: FeaturesSnapshot,
+}
+
+// ---------------------------------------------------------------- features
+
+/// A connected peer and the features both sides currently allow with it.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturePeer {
+    pub id: String,
+    pub name: String,
+    pub clipboard: bool,
+    pub files: bool,
+    pub text_share: bool,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardStatus {
+    /// Synchronization is enabled in settings.
+    pub enabled: bool,
+    /// Unix ms of the last clipboard update sent or received.
+    pub last_sync_at: Option<u64>,
+    /// "sent" or "received".
+    pub last_direction: Option<&'static str>,
+    pub last_peer: Option<String>,
+    /// "text", "rich" or "image".
+    pub last_kind: Option<&'static str>,
+    pub history_count: u32,
+    /// Increases whenever the history changes; the UI refetches it then.
+    pub history_revision: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferFile {
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferView {
+    pub id: String,
+    /// "send" or "receive".
+    pub direction: &'static str,
+    pub peer_id: String,
+    pub peer_name: String,
+    pub files: Vec<TransferFile>,
+    pub total_bytes: u64,
+    pub done_bytes: u64,
+    pub bytes_per_sec: f64,
+    /// "pending" (waiting for approval), "active", "done", "failed", "cancelled", "rejected".
+    pub state: &'static str,
+    pub error: Option<String>,
+    pub started_at: u64,
+    pub finished_at: Option<u64>,
+    /// Receive: folder the files were saved to.
+    pub destination: Option<String>,
+    pub can_retry: bool,
+}
+
+/// Text, a link or a snippet shared manually between computers.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedTextView {
+    pub id: String,
+    /// "sent" or "received".
+    pub direction: &'static str,
+    pub peer_name: String,
+    /// At most 4 KB; the full text is copied with `copy_shared_text`.
+    pub preview: String,
+    pub chars: u32,
+    /// The whole text is a single http(s) URL.
+    pub is_link: bool,
+    pub at: u64,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturesSnapshot {
+    pub peers: Vec<FeaturePeer>,
+    pub clipboard: ClipboardStatus,
+    /// Active, pending and recent transfers, newest first (at most 50).
+    pub transfers: Vec<TransferView>,
+    /// Recent shared texts, newest first (at most 20, in memory only).
+    pub shared_texts: Vec<SharedTextView>,
+}
+
+/// An entry of the clipboard history (`get_clipboard_history`).
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardEntry {
+    pub id: String,
+    /// "text", "rich" or "image".
+    pub kind: &'static str,
+    /// First 300 characters of the text, or e.g. "Image 1920 x 1080".
+    pub preview: String,
+    pub bytes: u64,
+    /// "local", "sent" or "received".
+    pub origin: &'static str,
+    /// Device the clip came from ("This PC" for local copies).
+    pub source: String,
+    pub at: u64,
 }
 
 #[derive(Clone, Serialize)]

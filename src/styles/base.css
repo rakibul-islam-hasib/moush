@@ -20,7 +20,7 @@ body {
   color: var(--text);
   font-family: var(--font);
   font-size: var(--fs-body);
-  line-height: 20px;
+  line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;
@@ -39,42 +39,47 @@ p {
 }
 
 strong {
-  font-weight: 600;
+  font-weight: var(--fw-strong);
 }
 
 input,
 select,
 textarea,
 .mono,
-.log-view {
+.log-view,
+.selectable {
   user-select: text;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
 
 kbd {
   display: inline-block;
-  min-width: 20px;
+  min-width: 22px;
   padding: 0 6px;
   border: 1px solid var(--control-stroke);
+  border-bottom-width: 2px;
   border-bottom-color: var(--control-stroke-bottom);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
   background: var(--control);
   font-family: var(--font);
   font-size: var(--fs-caption);
+  font-weight: var(--fw-strong);
   line-height: 18px;
   text-align: center;
+  white-space: nowrap;
 }
 
 :focus-visible {
   outline: 2px solid var(--focus-outer);
-  outline-offset: 1px;
-  box-shadow: 0 0 0 1px var(--focus-inner);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
 }
 
 .mono {
@@ -84,11 +89,19 @@ kbd {
 
 .caption {
   font-size: var(--fs-caption);
-  line-height: 16px;
+  line-height: var(--lh-caption);
 }
 
 .text-secondary {
   color: var(--text-secondary);
+}
+
+.text-strong {
+  font-weight: var(--fw-strong);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 .sr-only {
@@ -129,30 +142,43 @@ kbd {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: var(--space-4);
   height: 100%;
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 .splash-error {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--space-4);
   width: min(480px, 100%);
 }
 
 .loading-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+/*
+ * Reduced motion: html[data-motion="reduce"] is set from settings.appearance.motion
+ * ("reduce", or "system" while Windows asks for less animation). Movement stops; state
+ * changes still happen instantly so nothing is hidden behind an animation.
+ */
+html[data-motion="reduce"] *,
+html[data-motion="reduce"] *::before,
+html[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
   }
 }

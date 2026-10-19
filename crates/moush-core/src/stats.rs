@@ -64,7 +64,14 @@ pub struct LatencySummary {
 impl LatencySummary {
     /// Rescales every value (e.g. microseconds to milliseconds).
     pub fn scaled(self, f: f64) -> Self {
-        Self { count: self.count, mean: self.mean * f, p50: self.p50 * f, p95: self.p95 * f, p99: self.p99 * f, max: self.max * f }
+        Self {
+            count: self.count,
+            mean: self.mean * f,
+            p50: self.p50 * f,
+            p95: self.p95 * f,
+            p99: self.p99 * f,
+            max: self.max * f,
+        }
     }
 }
 

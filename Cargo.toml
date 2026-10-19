@@ -14,14 +14,59 @@ moush-engine = { path = "crates/moush-engine" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-snow = "0.10"
+# Only the primitives of Noise_XX_25519_ChaChaPoly_BLAKE2s. snow's default `std` feature
+# also pulls in `ring` (via `ring/std`), and its default resolver adds AES-GCM and SHA-2.
+snow = { version = "0.10", default-features = false, features = ["use-chacha20poly1305", "use-blake2", "use-curve25519", "use-getrandom"] }
 blake2 = "0.10"
 if-addrs = "0.15"
 windows = "0.62"
 
+# Release: optimize for size, except the input and transport hot path, which stays at
+# opt-level 3 (at "z" the crypto runs ~4x slower, and a bulk chunk is decrypted on the
+# client's injection thread). Measurements and alternatives: docs/PERFORMANCE.md.
+# `panic = "abort"` would save another ~2.8 MB but is deliberately not used: the hook
+# callback relies on `catch_unwind` (an internal error lets the event through instead of
+# killing the process) and a panic in one connection must not take the whole app down.
 [profile.release]
-opt-level = 3
-lto = "thin"
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
 panic = "unwind"
-strip = "debuginfo"
+strip = true
+
+[profile.release.package.moush-core]
+opt-level = 3
+[profile.release.package.moush-engine]
+opt-level = 3
+[profile.release.package.snow]
+opt-level = 3
+[profile.release.package.chacha20poly1305]
+opt-level = 3
+[profile.release.package.chacha20]
+opt-level = 3
+[profile.release.package.poly1305]
+opt-level = 3
+[profile.release.package.blake2]
+opt-level = 3
+[profile.release.package.curve25519-dalek]
+opt-level = 3
+
+# Debug builds: the transport's crypto runs ~200x slower unoptimized (3-4 MB/s), which makes
+# bulk tests slow and debug builds of the app useless for transfers. These crates are small
+# and rarely rebuilt, so optimizing them costs little compile time.
+[profile.dev.package.snow]
+opt-level = 3
+[profile.dev.package.chacha20]
+opt-level = 3
+[profile.dev.package.poly1305]
+opt-level = 3
+[profile.dev.package.chacha20poly1305]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+[profile.dev.package.universal-hash]
+opt-level = 3
+[profile.dev.package.cipher]
+opt-level = 3

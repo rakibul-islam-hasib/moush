@@ -20,6 +20,7 @@ use moush_core::router::RouterSettings;
 use moush_core::stats::{LatencySummary, Stats};
 use moush_core::trust::TrustStore;
 
+use crate::features::FeatureHub;
 use crate::layout::{self, ClientView, LayoutStore};
 use crate::win::capture::{Capture, CaptureCmd, CaptureEvents};
 use crate::win::dpi::make_thread_dpi_aware;
@@ -59,23 +60,35 @@ enum Ctl {
     Stop,
 }
 
-struct Events(Mutex<Sender<Ctl>>);
+struct Events {
+    ctl: Mutex<Sender<Ctl>>,
+    hub: Arc<FeatureHub>,
+}
 
 impl Events {
     fn send(&self, c: Ctl) {
-        let _ = self.0.lock().unwrap().send(c);
+        let _ = self.ctl.lock().unwrap().send(c);
     }
 }
 
 impl HostEvents for Events {
     fn client_connected(&self, client: ClientHandle) {
+        // Synchronously, before the client's reader starts: feature traffic may follow at once.
+        self.hub.peer_up(&client.id, &client.name, client.conn_no, client.sender.clone());
         self.send(Ctl::Connected(client));
     }
     fn client_screens(&self, id: &str, conn_no: u64, screens: Vec<MonitorDesc>) {
         self.send(Ctl::Screens(id.to_owned(), conn_no, screens));
     }
     fn client_disconnected(&self, id: &str, conn_no: u64, _reason: &str) {
+        self.hub.peer_down(id, conn_no);
         self.send(Ctl::Gone(id.to_owned(), conn_no));
+    }
+    fn client_capabilities(&self, id: &str, conn_no: u64, features: u32) {
+        self.hub.on_capabilities(id, conn_no, features);
+    }
+    fn client_feature(&self, id: &str, conn_no: u64, channel: u8, body: Vec<u8>) {
+        self.hub.on_feature(id, conn_no, channel, body);
     }
 }
 
@@ -117,11 +130,12 @@ impl HostEngine {
         trust: Arc<TrustStore>,
         broker: Arc<PairingBroker>,
         stats: Arc<Stats>,
+        hub: Arc<FeatureHub>,
         notify: Notify,
     ) -> io::Result<Self> {
         make_thread_dpi_aware();
         let (tx, rx) = mpsc::channel();
-        let events = Arc::new(Events(Mutex::new(tx.clone())));
+        let events = Arc::new(Events { ctl: Mutex::new(tx.clone()), hub });
         let mut store = LayoutStore::load(opts.layout_path.clone());
         // Drop layout entries for devices that are no longer paired.
         let trusted: Vec<String> = trust.list().into_iter().map(|p| p.id).collect();
@@ -136,7 +150,15 @@ impl HostEngine {
         let (layout, views) = layout::build(&host_monitors, &[], &store);
 
         let capture = Capture::start(layout, opts.router, stats.clone(), events.clone())?;
-        let server = match HostServer::start(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opts.port), opts.name.clone(), identity.clone(), trust, broker, stats, events) {
+        let server = match HostServer::start(
+            SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opts.port),
+            opts.name.clone(),
+            identity.clone(),
+            trust,
+            broker,
+            stats,
+            events,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 capture.stop();
@@ -145,7 +167,8 @@ impl HostEngine {
         };
         let mut warning = None;
         let responder = if opts.discovery {
-            match Responder::start(Announce { id: identity.device_id(), name: opts.name.clone(), port: server.port() }) {
+            match Responder::start(Announce { id: identity.device_id(), name: opts.name.clone(), port: server.port() })
+            {
                 Ok(r) => Some(r),
                 Err(e) => {
                     log::warn!("LAN discovery unavailable: {e}");

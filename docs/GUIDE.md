@@ -46,7 +46,7 @@ laptop; the keyboard follows the cursor.
    *Diagnostics* page.
 3. **Pair** — a dialog appears on **both** computers. Check that the 6-digit codes match
    and click **Allow** on both. Devices stay paired and reconnect automatically.
-4. **Arrange monitors (host)** — open **Layout**. Your monitors show up as Windows
+4. **Arrange monitors (host)** — open **Devices → Screen layout**. Your monitors show up as Windows
    arranges them. Drag the laptop so one of its edges touches the side of the monitor it
    sits next to on your desk (the touching segment turns blue), then **Save**. **Test**
    jumps the cursor to the laptop.
@@ -61,20 +61,56 @@ keyboard types there. Move back to return.
 ### Switching between computers
 
 - Move the cursor across a shared edge to hand over input; move back to return.
+- **Ctrl + Alt + Shift + Arrow** — jump to the computer next to the current one in that
+  direction; **Ctrl + Alt + Shift + Home** — back to the host.
 - **Ctrl + Alt + Esc** (on the host keyboard) — bring the cursor back to the host
   immediately.
 - **Scroll Lock** — lock the cursor to the computer it is on (toggle; can be disabled in
   Settings).
 - Tray icon menu → *Bring cursor back to this computer*.
 
-### Settings and pages
+The keyboard follows the cursor, including Alt+Tab and Win shortcuts (they act on the
+computer you are working on). *Features → Keyboard & switching* lets you keep system
+shortcuts on the host, list shortcuts that always stay on the host, require a modifier
+for edge switching, or share only the mouse. Details and limits: [KEYBOARD.md](KEYBOARD.md).
 
-- **Home** — current role and sharing state (*Sharing is on*).
-- **Devices** — discover and connect to hosts; manage paired devices.
-- **Layout** — place each computer's monitors on the shared plane.
-- **Settings** — role, device name, discovery toggle, port, autostart, cursor options.
-- **Diagnostics** — firewall state, latency, device id / public key, recent log lines,
-  *Add firewall rule*, *Open log folder*.
+### Clipboard
+
+Copy on one computer, paste on the other: text, rich text (HTML/RTF) and images are
+synchronized in both directions (through the host when several clients are connected).
+Content that password managers mark as sensitive is skipped. *Features → Clipboard* has
+the per-format switches, a size limit and an in-memory history (never written to disk)
+where earlier clips can be copied again.
+
+### Sending files, text and links
+
+- Drag files onto the Moush window (or use **Transfers → Send files…**). The other
+  computer asks before accepting (configurable) and saves them to `Downloads\Moush`
+  (configurable). Progress, speed, cancel and retry (resumes partial files) are on the
+  **Transfers** page. Folders are not supported yet — zip them first.
+- Received files are never opened automatically and carry the Windows "downloaded from
+  the internet" mark, so Windows warns before running them.
+- **Share a text, link or snippet** on the Transfers page sends it to the other computer,
+  where it can be copied or (for links) opened with one click.
+
+### Per-device permissions
+
+Under **Devices**, open a paired device to choose whether it may use clipboard sync,
+file transfer and text sharing with this computer. A feature works only when both
+computers allow it.
+
+### Pages
+
+- **Home** — sharing state, which computer has the cursor, quick switches for clipboard,
+  keyboard and file transfer, recent activity.
+- **Devices** — connected and paired computers, permissions, discovery and connect
+  (client), and the **Screen layout** tab (host) to place each computer's monitors.
+- **Features** — clipboard, keyboard & switching, file transfer and notification settings,
+  clipboard history.
+- **Transfers** — send files, approve incoming transfers, shared text and links.
+- **Settings** — device name, role, appearance (theme, transparency, animations), startup,
+  network, reset to defaults, and **Diagnostics** (firewall state, latency, device id,
+  logs, *Add firewall rule*).
 
 ---
 
@@ -103,19 +139,19 @@ cargo build --release -p moush-cli # headless tool (see below)
 
 The built installer lands in `target\release\bundle\nsis`.
 
-### Headless tool (`moush.exe`)
+### Headless tool (`moush-cli.exe`)
 
 Runs the same engine without the UI — handy for testing on two machines, benchmarking and
 troubleshooting:
 
 ```
-moush monitors                        list monitors as Moush sees them
-moush discover                        find hosts on the LAN
-moush host [--port N]                 run as host (pairing prompts in the console)
-moush client <ip|host-id> [--dry-run] run as client; --dry-run logs instead of injecting
-moush bench [--events N]              full network-path latency benchmark on loopback
-moush selftest                        verify input capture/injection APIs on this machine
-moush identity                        print this device's id and public key
+moush-cli monitors                        list monitors as Moush sees them
+moush-cli discover                        find hosts on the LAN
+moush-cli host [--port N]                 run as host (pairing prompts in the console)
+moush-cli client <ip|host-id> [--dry-run] run as client; --dry-run logs instead of injecting
+moush-cli bench [--events N]              full network-path latency benchmark on loopback
+moush-cli selftest                        verify input capture/injection APIs on this machine
+moush-cli identity                        print this device's id and public key
 ```
 
 `scripts\e2e-local.ps1` runs a live end-to-end test on one machine (real GUI host with real

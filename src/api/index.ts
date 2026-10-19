@@ -10,6 +10,12 @@ export interface MockControls {
   togglePairing: () => void;
   /** Host: a client drops off / comes back. Client: the connection is lost and retried. */
   simulateConnectionDrop: () => void;
+  /** A connected computer offers a file (pending approval unless auto-accept is on). */
+  simulateIncomingTransfer: () => void;
+  /** A connected computer shares a text or a link. */
+  simulateSharedText: () => void;
+  /** The clipboard is synchronized from a connected computer. */
+  simulateClipboardSync: () => void;
 }
 
 export interface Backend {

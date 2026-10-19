@@ -3,23 +3,27 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter};
 
 use moush_engine::client::{ClientEngine, ClientOptions, ClientState, ConnectTarget};
+use moush_engine::clipboard::ClipboardService;
 use moush_engine::core::crypto::Identity;
 use moush_engine::core::discovery;
+use moush_engine::core::features::{self as feat, cap};
 use moush_engine::core::pairing::PairingBroker;
 use moush_engine::core::protocol::MonitorDesc;
 use moush_engine::core::stats::Stats;
 use moush_engine::core::trust::{TrustRole, TrustStore};
 use moush_engine::core::util::now_ms;
 use moush_engine::discovered::DiscoveryCache;
+use moush_engine::features::FeatureHub;
 use moush_engine::host::{HostEngine, HostOptions, Notify};
 use moush_engine::paths::AppPaths;
+use moush_engine::transfer::{self as xfer, TransferService};
 use moush_engine::win::monitors::{self, Monitor};
 use moush_engine::win::system::{self, FirewallState, ProcessMonitor};
 
@@ -49,6 +53,13 @@ pub struct App {
     started: Instant,
     pub platform: Mutex<PlatformInfo>,
     notify: Notify,
+    /// Connects optional features (clipboard, file transfer) to the connected peers.
+    pub hub: Arc<FeatureHub>,
+    /// Clipboard sync, history and text sharing (set once in `new`).
+    pub clipboard: OnceLock<Arc<ClipboardService>>,
+    /// File transfer with connected peers (registered with `hub`).
+    pub transfers: Arc<TransferService>,
+    handle: AppHandle,
 }
 
 impl App {
@@ -75,9 +86,36 @@ impl App {
             host_error: Mutex::new(None),
             process: Mutex::new(ProcessMonitor::new()),
             started: Instant::now(),
-            platform: Mutex::new(PlatformInfo { os_build, windows11: os_build >= 22000, mica: false, elevated: system::is_elevated() }),
+            platform: Mutex::new(PlatformInfo {
+                os_build,
+                windows11: os_build >= 22000,
+                mica: false,
+                elevated: system::is_elevated(),
+            }),
             notify,
+            hub: FeatureHub::new(),
+            clipboard: OnceLock::new(),
+            transfers: TransferService::new(xfer::default_download_dir()),
+            handle: handle.clone(),
         });
+        let weak = Arc::downgrade(&app);
+        app.hub.set_policy(move |id| weak.upgrade().map(|a| a.local_caps(id)).unwrap_or(0));
+        match crate::clipboard_cmds::start(&app, app.identity.device_id()) {
+            Ok(svc) => {
+                let _ = app.clipboard.set(svc);
+            }
+            Err(e) => log::error!("clipboard sync is unavailable: {e}"),
+        }
+        let (w1, w2) = (Arc::downgrade(&app), Arc::downgrade(&app));
+        app.transfers.set_handlers(
+            move || w1.upgrade().map(|a| a.config().settings.transfer).unwrap_or_default(),
+            move |e| {
+                if let Some(a) = w2.upgrade() {
+                    crate::transfer_cmds::on_event(&a, e);
+                }
+            },
+        );
+        app.transfers.attach(&app.hub);
         // Emit snapshots from one thread, coalescing bursts of changes.
         let weak = Arc::downgrade(&app);
         thread::Builder::new()
@@ -89,6 +127,27 @@ impl App {
 
     pub fn notify(&self) {
         (self.notify)();
+    }
+
+    pub fn handle(&self) -> &AppHandle {
+        &self.handle
+    }
+
+    /// Feature bits this computer allows with a peer: global settings combined with the
+    /// paired device's policy. Unpaired devices get nothing.
+    pub fn local_caps(&self, peer_id: &str) -> u32 {
+        let Some(policy) = self.trust.policy(peer_id) else { return 0 };
+        let s = self.config().settings;
+        feat::local_caps(&s.clipboard, &s.transfer, &policy)
+    }
+
+    pub fn set_device_policy(&self, id: &str, policy: feat::DevicePolicy) -> Result<(), String> {
+        if !self.trust.set_policy(id, policy).map_err(|e| e.to_string())? {
+            return Err("that device is not paired".into());
+        }
+        self.hub.refresh_caps();
+        self.notify();
+        Ok(())
     }
 
     pub fn config(&self) -> Config {
@@ -184,6 +243,7 @@ impl App {
             self.trust.clone(),
             self.broker.clone(),
             self.stats.clone(),
+            self.hub.clone(),
             self.notify.clone(),
         );
         let r = match result {
@@ -251,11 +311,13 @@ impl App {
                 default_port: c.settings.port,
                 auto_reconnect: true,
                 dry_run: std::env::var_os("MOUSH_DRY_RUN").is_some(),
+                focus_on_enter: c.settings.keyboard.focus_on_enter,
             },
             self.identity.clone(),
             self.trust.clone(),
             self.broker.clone(),
             self.stats.clone(),
+            self.hub.clone(),
             self.notify.clone(),
             |_| {}, // the host is remembered in `remember_host` once connected
         )
@@ -337,7 +399,9 @@ impl App {
         let old = self.config();
         // The UI never owns this field; keep what the backend recorded.
         new.last_host_address = old.settings.last_host_address.clone();
-        if new.launch_at_startup != old.settings.launch_at_startup || new.launch_at_startup != system::launch_at_startup_enabled() {
+        if new.launch_at_startup != old.settings.launch_at_startup
+            || new.launch_at_startup != system::launch_at_startup_enabled()
+        {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
             system::set_launch_at_startup(new.launch_at_startup, &exe, "--autostart")
                 .map_err(|e| format!("could not change the startup setting: {e}"))?;
@@ -346,10 +410,14 @@ impl App {
         c.settings = new.clone();
         self.save_config(&c);
         *self.config.lock().unwrap() = c;
+        self.hub.refresh_caps();
 
         let restart_host = new.port != old.settings.port
             || new.discovery_enabled != old.settings.discovery_enabled
             || new.device_name != old.settings.device_name;
+        if let Runtime::Client(cl) = &*self.runtime.lock().unwrap() {
+            cl.set_focus_on_enter(new.keyboard.focus_on_enter);
+        }
         let host_running = matches!(*self.runtime.lock().unwrap(), Runtime::Host(_));
         if host_running {
             if restart_host {
@@ -415,9 +483,33 @@ impl App {
                     last_address: t.last_address.clone(),
                     paired_at: t.paired_at,
                     last_seen: t.last_seen,
+                    policy: t.policy,
+                    online: self.hub.peer(&t.id).is_some(),
                 })
                 .collect(),
             discovered,
+            features: self.features_snapshot(),
+        }
+    }
+
+    fn features_snapshot(&self) -> FeaturesSnapshot {
+        let s = self.config().settings;
+        FeaturesSnapshot {
+            peers: self
+                .hub
+                .peers()
+                .into_iter()
+                .map(|p| FeaturePeer {
+                    clipboard: p.effective_caps & cap::CLIPBOARD != 0,
+                    files: p.effective_caps & cap::FILES != 0,
+                    text_share: p.effective_caps & cap::TEXT_SHARE != 0,
+                    id: p.id,
+                    name: p.name,
+                })
+                .collect(),
+            clipboard: crate::clipboard_cmds::status(self, s.clipboard.enabled),
+            transfers: self.transfers.list().into_iter().map(crate::transfer_cmds::view).collect(),
+            shared_texts: crate::clipboard_cmds::shared_texts(self),
         }
     }
 
@@ -635,6 +727,8 @@ fn desc_info(i: usize, m: &MonitorDesc) -> MonitorInfo {
 fn emit_loop(rx: Receiver<()>, app: std::sync::Weak<App>, handle: AppHandle) {
     let mut last_client_state: Option<&'static str> = None;
     let mut prompted: Vec<String> = Vec::new();
+    let mut asked_transfers: Vec<String> = Vec::new();
+    let mut connections = crate::notify::ConnectionWatch::default();
     while rx.recv().is_ok() {
         // Coalesce a burst of changes into one snapshot.
         thread::sleep(Duration::from_millis(25));
@@ -649,9 +743,17 @@ fn emit_loop(rx: Receiver<()>, app: std::sync::Weak<App>, handle: AppHandle) {
         // A pairing prompt must not go unseen while the window sits in the tray.
         let new_prompt = snap.pairing.iter().any(|p| p.needs_my_approval && !prompted.contains(&p.request_id));
         prompted = snap.pairing.iter().map(|p| p.request_id.clone()).collect();
-        if new_prompt {
+        // Likewise for files waiting for approval.
+        let incoming = || snap.features.transfers.iter().filter(|t| t.direction == "receive" && t.state == "pending");
+        let new_transfer = incoming().any(|t| !asked_transfers.contains(&t.id));
+        asked_transfers = incoming().map(|t| t.id.clone()).collect();
+        if new_prompt || new_transfer {
             crate::show_main_window(&handle);
         }
+        let running =
+            snap.host.as_ref().is_some_and(|h| h.running) || snap.client.as_ref().is_some_and(|c| c.state != "idle");
+        let peers = snap.features.peers.iter().map(|p| (p.id.clone(), p.name.clone())).collect();
+        connections.update(&app, peers, running);
         if let Err(e) = handle.emit("snapshot", &snap) {
             log::debug!("snapshot emit failed: {e}");
         }
