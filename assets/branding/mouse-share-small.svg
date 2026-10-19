@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="small-title">
+  <title id="small-title">Mouse Share - Small Size Cut</title>
+  <defs>
+    <linearGradient id="sm-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#03060D"/>
+    </linearGradient>
+    <linearGradient id="sm-stream" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle Base Tile -->
+  <rect x="36" y="36" width="440" height="440" rx="96" fill="url(#sm-bg)" stroke="#38BDF8" stroke-opacity="0.5" stroke-width="4"/>
+
+  <!-- Screen 1 (Host) -->
+  <rect x="80" y="190" width="224" height="152" rx="20" fill="#0C1527" stroke="#3B82F6" stroke-width="6"/>
+
+  <!-- Screen 2 Cutout & Elevated Client -->
+  <rect x="194" y="122" width="238" height="166" rx="24" fill="#03060D"/>
+  <rect x="204" y="132" width="224" height="152" rx="20" fill="#132347" stroke="#00F0FF" stroke-width="6"/>
+
+  <!-- Connection Line (Thick 32px Beam) -->
+  <path d="M 144 266 C 196 308 238 160 372 208" fill="none" stroke="url(#sm-stream)" stroke-width="32" stroke-linecap="round"/>
+
+  <!-- Hero Cursor (Bold High-Contrast Silhouette, Clean Mathematical Angles) -->
+  <g transform="translate(240, 186) rotate(-15)">
+    <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#020409" stroke="#020409" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#FFFFFF"/>
+  </g>
+</svg>

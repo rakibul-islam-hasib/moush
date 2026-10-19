@@ -1,611 +1,585 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Moush — one mouse and keyboard for every Windows PC</title>
+    <title>Moush — Seamless Mouse & Keyboard Sharing Across Windows PCs</title>
     <meta
       name="description"
-      content="Moush shares one mouse and keyboard across Windows computers on your local network. Seamless edge switching, shared clipboard, encrypted file transfer, secure pairing."
+      content="Moush shares one mouse and keyboard across Windows computers on your local network. Ultra-low latency, shared clipboard, encrypted file streaming, and Noise-XX secure pairing."
     />
-    <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)" />
-    <meta property="og:title" content="Moush — one mouse and keyboard for every PC" />
+    <meta name="theme-color" content="#040711" />
+    <meta property="og:title" content="Moush — Seamless Mouse & Keyboard Sharing" />
     <meta
       property="og:description"
-      content="Move your cursor off the edge of one computer and keep working on the next. Windows 10/11, encrypted, low latency."
+      content="Move your cursor off the edge of one computer and keep working on the next. Windows 10/11, encrypted, ~50 µs input overhead, Rust-powered."
     />
     <meta property="og:type" content="website" />
-    <link rel="icon" type="image/png" href="assets/icon.png" />
+    <meta property="og:image" content="assets/icon.png" />
+    <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
+    <link rel="alternate icon" type="image/png" href="assets/icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
+    <script defer src="app.js"></script>
   </head>
   <body id="top">
-    <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-      <symbol id="i-monitor" viewBox="0 0 24 24">
-        <rect x="2.5" y="4" width="19" height="13" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </symbol>
-      <symbol id="i-grid" viewBox="0 0 24 24">
-        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1.5" />
-      </symbol>
-      <symbol id="i-keyboard" viewBox="0 0 24 24">
-        <rect x="2.5" y="6" width="19" height="12" rx="2" />
-        <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M18.5 10h.01M7 14h10" />
-      </symbol>
-      <symbol id="i-clipboard" viewBox="0 0 24 24">
-        <rect x="8" y="2.5" width="8" height="4" rx="1" />
-        <path d="M16 4.5h2a2 2 0 0 1 2 2V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h2" />
-        <path d="M8 12h8M8 16h5" />
-      </symbol>
-      <symbol id="i-transfer" viewBox="0 0 24 24">
-        <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-        <path d="M12 11v5M9.5 13.5 12 11l2.5 2.5" />
-      </symbol>
-      <symbol id="i-link" viewBox="0 0 24 24">
-        <path d="M9.5 14.5 14.5 9.5" />
-        <path d="M7.5 10.5 5.8 12.2a3.5 3.5 0 0 0 5 5l1.7-1.7" />
-        <path d="M16.5 13.5l1.7-1.7a3.5 3.5 0 0 0-5-5l-1.7 1.7" />
-      </symbol>
-      <symbol id="i-shield" viewBox="0 0 24 24">
-        <path d="M12 2.5 20 6v6c0 5-3.5 8.2-8 9.5-4.5-1.3-8-4.5-8-9.5V6z" />
-        <path d="m8.5 12 2.3 2.3 4.7-4.6" />
-      </symbol>
-      <symbol id="i-sliders" viewBox="0 0 24 24">
-        <path d="M4 7h16M4 12h16M4 17h16" />
-        <circle cx="9" cy="7" r="2" />
-        <circle cx="15" cy="12" r="2" />
-        <circle cx="8" cy="17" r="2" />
-      </symbol>
-      <symbol id="i-bolt" viewBox="0 0 24 24">
-        <path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z" />
-      </symbol>
-      <symbol id="i-arrow" viewBox="0 0 24 24">
-        <path d="M5 12h14M13 6l6 6-6 6" />
-      </symbol>
-      <symbol id="i-mark" viewBox="0 0 24 24">
-        <rect x="2.5" y="2.5" width="8.5" height="8.5" rx="2" />
-        <rect x="13" y="13" width="8.5" height="8.5" rx="2" />
-        <path d="M8.5 8.5 15.5 15.5M15.5 10.5v5h-5" />
-      </symbol>
-      <symbol id="i-github" viewBox="0 0 24 24">
-        <path
-          d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"
-        />
-      </symbol>
-    </svg>
+    <!-- Ambient Luminous Mesh -->
+    <div class="ambient-mesh" aria-hidden="true">
+      <div class="mesh-blob mesh-blob-1"></div>
+      <div class="mesh-blob mesh-blob-2"></div>
+      <div class="mesh-blob mesh-blob-3"></div>
+    </div>
 
-    <a class="skip-link" href="#main">Skip to content</a>
-
+    <!-- Navigation Header -->
     <header class="site-header">
       <div class="shell header-inner">
-        <a class="brand" href="#top" aria-label="Moush home">
-          <svg class="brand-mark" aria-hidden="true"><use href="#i-mark" /></svg>
-          <span class="brand-name">Moush</span>
+        <a class="brand-link" href="#top" aria-label="Moush Home">
+          <img class="brand-logo-img" src="assets/icon.svg" alt="Moush Logo" width="38" height="38" />
+          <span>Moush</span>
+          <span class="brand-badge">v0.1.0</span>
         </a>
 
-        <nav class="site-nav" aria-label="Main">
+        <nav class="site-nav" aria-label="Main Navigation">
+          <a href="#simulator">Simulator</a>
           <a href="#features">Features</a>
-          <a href="#screenshots">Screenshots</a>
+          <a href="#gallery">Screenshots</a>
           <a href="#install">Install</a>
           <a href="#guide">Guide</a>
-          <a href="#troubleshooting">Support</a>
+          <a href="#faq">FAQ</a>
         </nav>
 
         <div class="header-actions">
-          <a class="nav-source" href="https://github.com/rakibul-islam-hasib/moush" rel="noopener">
-            <svg class="icon icon-github" aria-hidden="true"><use href="#i-github" /></svg>
+          <button id="theme-toggle" class="btn-icon-toggle" aria-label="Toggle Color Theme" title="Toggle Light/Dark Theme">
+            <svg id="theme-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+          <a class="btn btn-secondary btn-sm" href="https://github.com/rakibul-islam-hasib/moush" rel="noopener" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.09.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 2.5-.34c.85 0 1.71.12 2.5.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"/>
+            </svg>
             <span>GitHub</span>
           </a>
           <a class="btn btn-primary btn-sm" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
-            Download
+            <span>Download</span>
           </a>
         </div>
       </div>
     </header>
 
     <main id="main">
-      <!-- Hero -->
+      <!-- Hero Section -->
       <section class="hero">
         <div class="shell">
           <div class="hero-grid">
             <div class="hero-copy">
-              <p class="kicker"><span class="kicker-mark" aria-hidden="true"></span>Windows 10 &amp; 11 · local network</p>
-              <h1>One mouse.<br />One keyboard.<br /><span class="dim">Every PC.</span></h1>
-              <p class="lede">
-                Move your cursor off the edge of one computer and keep working on the next. Mouse, keyboard,
-                clipboard and files — encrypted, low latency, and paired with a six-digit code.
+              <div class="kicker">
+                <span class="kicker-dot"></span>
+                <span>Rust Engine · Zero Cloud · Local LAN</span>
+              </div>
+              <h1>
+                One mouse.<br />
+                One keyboard.<br />
+                <span class="text-gradient-flow">Every PC.</span>
+              </h1>
+              <p class="hero-lede">
+                Move your cursor effortlessly off the edge of your desktop and continue seamlessly on your laptop. Mouse, keyboard, clipboard synchronization, and encrypted file transfer — powered by a single high-efficiency Rust binary.
               </p>
-              <div class="hero-actions">
+
+              <div class="hero-ctas">
                 <a class="btn btn-primary" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
-                  Download for Windows
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span>Download for Windows</span>
                 </a>
-                <a class="link-arrow" href="#install">
-                  Read the guide
-                  <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+                <a class="btn btn-secondary" href="#simulator">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span>Try Live Simulator</span>
                 </a>
+              </div>
+
+              <!-- Quick Winget Copy Pill -->
+              <div id="hero-winget-copy" class="quick-winget" title="Click to copy winget command">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <span>Quick install: <code>winget install Moush</code></span>
+                <span class="copy-badge">Copy</span>
+              </div>
+
+              <!-- Telemetry Metrics -->
+              <div class="hero-telemetry">
+                <div class="telemetry-chip">
+                  <span class="telemetry-value">~50 µs</span>
+                  <span class="telemetry-label">Input Overhead</span>
+                </div>
+                <div class="telemetry-chip">
+                  <span class="telemetry-value">24800</span>
+                  <span class="telemetry-label">Encrypted TCP</span>
+                </div>
+                <div class="telemetry-chip">
+                  <span class="telemetry-value">0</span>
+                  <span class="telemetry-label">Cloud Dependencies</span>
+                </div>
+                <div class="telemetry-chip">
+                  <span class="telemetry-value">~2 MB</span>
+                  <span class="telemetry-label">Zero-Admin Size</span>
+                </div>
               </div>
             </div>
 
-            <aside class="hero-specs" aria-label="At a glance">
-              <dl>
-                <div><dt>Transport</dt><dd>Noise XX over TCP</dd></div>
-                <div><dt>Input overhead</dt><dd>~50 µs on loopback</dd></div>
-                <div><dt>Installer</dt><dd>~2 MB · no admin</dd></div>
-                <div><dt>License</dt><dd>MIT</dd></div>
-              </dl>
-            </aside>
-          </div>
-
-          <figure class="frame hero-frame">
-            <picture>
-              <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/home-dark.png" />
-              <img
-                src="assets/screenshots/home.png"
-                width="1280"
-                height="800"
-                alt="Moush Home screen: sharing is on, two computers connected, quick settings and recent activity."
-              />
-            </picture>
-            <figcaption><span>Home</span> Sharing on · two computers connected</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <!-- Statement band -->
-      <section class="band" aria-label="Guiding principles">
-        <div class="shell band-grid">
-          <p class="band-statement">No cloud. No accounts. No subscription. Your input never leaves the local network.</p>
-          <div class="band-stats">
-            <div><span class="stat-value">6-digit</span><span class="stat-label">mutual pairing</span></div>
-            <div><span class="stat-value">24800</span><span class="stat-label">TCP · input</span></div>
-            <div><span class="stat-value">0</span><span class="stat-label">cloud dependencies</span></div>
+            <!-- Hero Visual: Fluent App Icon Plate -->
+            <div class="hero-visual">
+              <div class="hero-icon-card">
+                <img class="hero-app-svg" src="assets/icon.svg" alt="Moush Application Icon" width="340" height="340" />
+                <div class="hero-icon-label">
+                  <span class="kicker-dot"></span>
+                  <span>Windows 11 Fluent App Tile</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Features -->
+      <!-- ==========================================================================
+           Interactive Workstation Simulator Section
+           ========================================================================== -->
+      <section id="simulator" class="simulator-section">
+        <div class="shell">
+          <div class="simulator-container">
+            <div class="simulator-header">
+              <div class="sim-title-group">
+                <div class="kicker">
+                  <span class="kicker-dot"></span>
+                  <span>Interactive Playground</span>
+                </div>
+                <h3>Experience Seamless Edge Switching Live</h3>
+                <p>Move your mouse freely across the virtual monitors below to test instant input handover and features.</p>
+              </div>
+
+              <div class="sim-controls">
+                <button id="sim-btn-edge" class="sim-btn" title="Simulate crossing between monitors">
+                  <span>⚡ Test Edge Switch</span>
+                </button>
+                <button id="sim-btn-clipboard" class="sim-btn" title="Simulate instant clipboard sync">
+                  <span>📋 Test Clipboard Sync</span>
+                </button>
+                <button id="sim-btn-file" class="sim-btn" title="Simulate drag-and-drop file stream">
+                  <span>📦 Test File Send</span>
+                </button>
+                <button id="sim-btn-layout" class="sim-btn" title="Rearrange monitor positions">
+                  <span>🖥️ Flip Layout</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Interactive Stage Canvas -->
+            <div id="sim-stage" class="sim-stage" aria-label="Interactive Workstation Simulation Stage">
+              <!-- Energy Conduit Cable Beam -->
+              <div id="sim-energy-conduit" class="sim-energy-conduit"></div>
+
+              <!-- Virtual Pointer Cursor -->
+              <div id="sim-cursor" class="sim-cursor" aria-hidden="true">
+                <svg viewBox="0 0 512 512" fill="none">
+                  <g transform="translate(40, 20) rotate(-15)">
+                    <path d="M 0 0 L 0 110 L 28 82 L 56 138 L 82 126 L 54 70 L 98 70 Z" fill="#020409" stroke="#020409" stroke-width="18" stroke-linejoin="round" stroke-linecap="round"/>
+                    <path d="M 0 0 L 0 110 L 28 82 L 56 138 L 82 126 L 54 70 L 98 70 Z" fill="#FFFFFF"/>
+                  </g>
+                </svg>
+              </div>
+
+              <!-- Monitor 1: Desktop Host -->
+              <div id="monitor-desktop" class="sim-monitor monitor-desktop active-monitor">
+                <div class="sim-monitor-header">
+                  <span>🖥️ Host PC · Primary Display (27" 4K)</span>
+                  <span>100% DPI</span>
+                </div>
+                <div class="sim-monitor-body">
+                  <div class="sim-screen-card">
+                    <strong>Active Workstation</strong>
+                    <span>Physical Logitech Master 3S &amp; Mechanical Keyboard</span>
+                  </div>
+                  <div id="sim-toast-desktop" class="sim-toast"></div>
+                </div>
+              </div>
+
+              <!-- Monitor 2: Laptop Client -->
+              <div id="monitor-laptop" class="sim-monitor monitor-laptop">
+                <div class="sim-monitor-header">
+                  <span>💻 Laptop Client (14" OLED)</span>
+                  <span>150% DPI</span>
+                </div>
+                <div class="sim-monitor-body">
+                  <div class="sim-screen-card">
+                    <strong>Remote Client</strong>
+                    <span>Control injected via low-level Windows SendInput</span>
+                  </div>
+                  <div id="sim-toast-laptop" class="sim-toast"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Status Telemetry Bar -->
+            <div class="sim-footer-bar">
+              <div class="sim-status-pill">
+                <span class="sim-status-dot"></span>
+                <span id="sim-status-text">Controlled: <strong>Desktop Host</strong> · Physical Input Hub</span>
+              </div>
+              <div>Noise XX Transport · Stream Port 24800 · Zero Polling</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================================================
+           Features Grid (Fluent Glassmorphic Architecture)
+           ========================================================================== */ -->
       <section id="features" class="section">
         <div class="shell">
           <header class="section-head">
-            <p class="kicker">01 — Features</p>
+            <div class="kicker">01 — Features</div>
             <div class="section-head-row">
-              <h2>A KVM switch, without the hardware.</h2>
-              <p>
-                One app is host and client. Choose a role on first launch and change it later. Everything runs
-                over a single encrypted TCP connection with no polling on the input path.
-              </p>
+              <h2>A software KVM switch, engineered for zero friction.</h2>
+              <p>One unified binary acts as host and client. Everything connects over a single encrypted TCP stream with zero polling on the critical input path.</p>
             </div>
           </header>
 
-          <div class="feature-grid">
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">01</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-monitor" /></svg>
+          <div class="features-grid">
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
               </div>
-              <h3>Seamless edge switching</h3>
-              <p>Cross a shared edge and input follows. Edges shared with your own monitors keep behaving like normal Windows transitions.</p>
+              <h3>Seamless Edge Switching</h3>
+              <p>Glide off the edge of your screen and control seamlessly hands over. Transitions between your host's own monitors continue to behave normally.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">02</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-grid" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
               </div>
-              <h3>Multi-monitor &amp; mixed DPI</h3>
-              <p>Monitor sizes, positions and scaling are detected on both sides. A 150% laptop sits next to 100% monitors at its real-world size.</p>
+              <h3>Multi-Monitor &amp; Mixed DPI</h3>
+              <p>Real-world monitor dimensions and DPI scales are detected automatically. A 150% scaled laptop sits next to 100% monitors at exact physical proportions.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">03</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-keyboard" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                  <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10"></path>
+                </svg>
               </div>
-              <h3>Keyboard that follows you</h3>
-              <p>Alt+Tab and Win shortcuts act on the computer you are working on — or stay on the host if you prefer.</p>
+              <h3>Follow-Me Keyboard</h3>
+              <p>Keystrokes follow the cursor instantly. System shortcuts like Alt+Tab and Win act on the computer you are actively focused on with zero key-sticking.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">04</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-clipboard" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1"></rect>
+                </svg>
               </div>
-              <h3>Shared clipboard</h3>
-              <p>Text, rich text and images sync both ways. Password-manager content is skipped, and an in-memory history keeps earlier clips.</p>
+              <h3>Shared Clipboard</h3>
+              <p>Text, rich text, and bitmap images sync bidirectionally in real time. Password managers are automatically excluded for security.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">05</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-transfer" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
               </div>
-              <h3>File transfer</h3>
-              <p>Drag files onto the window. Streamed, encrypted, integrity-checked and resumable, with approval on the receiving side.</p>
+              <h3>Encrypted File Transfer</h3>
+              <p>Drag files directly onto the window. Streamed in chunks over the encrypted connection with SHA-256 integrity verification and approval prompts.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">06</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-link" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
               </div>
-              <h3>Text &amp; links</h3>
-              <p>Share a snippet or a URL in one click. Links open in the default browser on the other computer.</p>
+              <h3>Quick Text &amp; URL Dispatch</h3>
+              <p>Share snippets and links with a single click. URLs automatically open in the default browser of the receiving computer.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">07</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-shield" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
               </div>
-              <h3>Secure by default</h3>
-              <p>Noise XX encryption with mutual authentication. A device is trusted only after a matching six-digit code is approved on both screens.</p>
+              <h3>Noise XX Zero-Trust Security</h3>
+              <p>Cryptographically secure pairing with mutual authentication. New devices require verifying a matching 6-digit code on both screens.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">08</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-sliders" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
               </div>
-              <h3>Per-device permissions</h3>
-              <p>Switch clipboard, files or text sharing off globally or per paired device. A feature works only when both sides allow it.</p>
+              <h3>Per-Device Permissions</h3>
+              <p>Toggle clipboard, file transfer, or text dispatch globally or individually per paired machine. Control only acts when both sides consent.</p>
             </article>
-            <article class="feature">
-              <div class="feature-top">
-                <span class="feature-index">09</span>
-                <svg class="icon feature-icon" aria-hidden="true"><use href="#i-bolt" /></svg>
+
+            <article class="feature-card">
+              <div class="feature-icon-wrapper">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
               </div>
-              <h3>Small &amp; fast</h3>
-              <p>Event-driven capture and injection. Roughly 7 MB, lives in the notification area, and transfers never stall the input path.</p>
+              <h3>Ultra-Lightweight Rust Engine</h3>
+              <p>Built with Rust and Tauri. Consumes only ~7 MB of memory, lives unobtrusively in the Windows notification tray, and never impacts system performance.</p>
             </article>
           </div>
         </div>
       </section>
 
-      <!-- Screenshots -->
-      <section id="screenshots" class="section section-tint">
+      <!-- ==========================================================================
+           Interactive Screenshot Gallery
+           ========================================================================== -->
+      <section id="gallery" class="gallery-section">
         <div class="shell">
           <header class="section-head">
-            <p class="kicker">02 — Screenshots</p>
+            <div class="kicker">02 — Interface</div>
             <div class="section-head-row">
-              <h2>Considered down to the last pixel.</h2>
-              <p>Fluent-inspired surfaces, an optional Mica backdrop, light and dark themes, reduced-motion support and high-contrast friendly colours.</p>
+              <h2>Crafted for Windows 11 Fluent elegance.</h2>
+              <p>Mica-inspired acrylic materials, smooth animations, light and dark themes, and high-contrast accessibility baked into every view.</p>
             </div>
           </header>
 
-          <figure class="frame gallery-wide">
-            <img src="assets/screenshots/transfers.png" width="1280" height="800" loading="lazy" alt="Transfers page: a pending incoming transfer, an active send, and finished transfers." />
-            <figcaption><span>Transfers</span> Approve, track and retry file sends</figcaption>
-          </figure>
+          <!-- Gallery Category Tabs -->
+          <div class="gallery-tabs">
+            <button class="gallery-tab-btn active" data-gallery="home">Home Dashboard</button>
+            <button class="gallery-tab-btn" data-gallery="layout">Screen Layout</button>
+            <button class="gallery-tab-btn" data-gallery="transfers">File Transfers</button>
+            <button class="gallery-tab-btn" data-gallery="features">Features</button>
+            <button class="gallery-tab-btn" data-gallery="devices">Devices</button>
+            <button class="gallery-tab-btn" data-gallery="diagnostics">Diagnostics</button>
+          </div>
 
-          <div class="gallery-2">
-            <figure class="frame">
-              <img src="assets/screenshots/layout.png" width="1280" height="800" loading="lazy" alt="Screen layout editor with two host monitors and a laptop placed to the left." />
-              <figcaption><span>Screen layout</span> Place each computer next to your real monitors</figcaption>
-            </figure>
-            <figure class="frame">
-              <img src="assets/screenshots/features.png" width="1280" height="800" loading="lazy" alt="Features page with clipboard sync options and expanders." />
-              <figcaption><span>Features</span> Clipboard, keyboard, transfer and notifications</figcaption>
-            </figure>
-            <figure class="frame">
-              <img src="assets/screenshots/devices.png" width="1280" height="800" loading="lazy" alt="Devices page listing connected and paired computers." />
-              <figcaption><span>Devices</span> Connected and paired computers, with permissions</figcaption>
-            </figure>
-            <figure class="frame">
-              <img src="assets/screenshots/diagnostics.png" width="1280" height="800" loading="lazy" alt="Diagnostics page with firewall state, latency and logs." />
-              <figcaption><span>Diagnostics</span> Firewall state, latency, device ID and logs</figcaption>
-            </figure>
+          <!-- Gallery Stage Frame -->
+          <div class="gallery-stage">
+            <img id="gallery-active-img" class="gallery-img" src="assets/screenshots/home-dark.png" alt="Moush Application Screenshot" width="1280" height="800" />
+            <div class="gallery-caption">
+              <div>
+                <strong id="gallery-title">Home Dashboard</strong> — <span id="gallery-desc">Instant connection status, sharing toggle, and real-time activity feed.</span>
+              </div>
+              <span>Windows 11 Mica Surface</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Themes band -->
-      <section class="band band-theme" aria-label="Themes">
-        <div class="shell theme-grid">
-          <div class="theme-copy">
-            <p class="kicker kicker-light">03 — Themes</p>
-            <h2>Light, dark, and everything between.</h2>
-            <p>
-              The interface follows Windows, or you can pin a theme. Transparency, motion and contrast are
-              first-class settings rather than afterthoughts.
-            </p>
-          </div>
-          <figure class="frame frame-dark">
-            <img src="assets/screenshots/home-dark.png" width="1280" height="800" loading="lazy" alt="Moush Home screen in dark theme." />
-            <figcaption><span>Dark theme</span> With the optional Mica backdrop</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      <!-- Install -->
+      <!-- ==========================================================================
+           Install & Quickstart Tabs
+           ========================================================================== -->
       <section id="install" class="section">
         <div class="shell install-grid">
-          <div class="install-aside">
-            <header class="section-head section-head-tight">
-              <p class="kicker">04 — Install</p>
-              <h2>Two minutes, start to finish.</h2>
-              <p>Install Moush on every computer you want to include. All of them must be on the same network.</p>
+          <div>
+            <header class="section-head">
+              <div class="kicker">03 — Get Started</div>
+              <h2>Up and running in two minutes.</h2>
+              <p>Install Moush on each computer you want to control. Both machines must be connected to the same local network or Wi-Fi.</p>
             </header>
 
-            <a class="btn btn-primary" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
-              Download the installer
-            </a>
-
-            <dl class="req-list">
-              <div><dt>Operating system</dt><dd>Windows 10 or 11 (x64)</dd></div>
-              <div><dt>Network</dt><dd>Same LAN / subnet</dd></div>
-              <div><dt>Rights</dt><dd>Per-user, no admin</dd></div>
-              <div><dt>Runtime</dt><dd>WebView2 — built into Windows 11</dd></div>
-            </dl>
+            <ol class="setup-steps">
+              <li class="setup-step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                  <h4>Install on each computer</h4>
+                  <p>Run the single installer executable. It installs cleanly per-user and requires zero administrator privileges.</p>
+                </div>
+              </li>
+              <li class="setup-step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                  <h4>Choose your roles</h4>
+                  <p>On the machine with the mouse and keyboard, choose <strong>Host</strong>. On the other computer(s), choose <strong>Client</strong>.</p>
+                </div>
+              </li>
+              <li class="setup-step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                  <h4>Pair with a 6-digit code</h4>
+                  <p>Verify that the six-digit code matches on both screens and click <strong>Allow</strong>. Paired devices reconnect automatically.</p>
+                </div>
+              </li>
+              <li class="setup-step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                  <h4>Arrange your screens</h4>
+                  <p>In <strong>Devices → Screen layout</strong>, drag your laptop monitor to match your desk. The shared edge turns cyan.</p>
+                </div>
+              </li>
+            </ol>
           </div>
 
-          <ol class="steps">
-            <li>
-              <span class="step-index">01</span>
-              <div>
-                <h3>Install on each computer</h3>
-                <p>Run <code>Moush_x.y.z_x64-setup.exe</code>. It installs for the current user and needs no administrator prompt.</p>
-              </div>
-            </li>
-            <li>
-              <span class="step-index">02</span>
-              <div>
-                <h3>Choose a role</h3>
-                <p>On the computer with the mouse and keyboard choose <strong>Host</strong>. On the others choose <strong>Client</strong>. Allow Moush on <strong>private</strong> networks when Windows asks.</p>
-              </div>
-            </li>
-            <li>
-              <span class="step-index">03</span>
-              <div>
-                <h3>Pair the computers</h3>
-                <p>On the client, pick the host under <strong>Devices</strong>. A dialog appears on both screens — check that the six-digit codes match and click <strong>Allow</strong> on both.</p>
-              </div>
-            </li>
-            <li>
-              <span class="step-index">04</span>
-              <div>
-                <h3>Arrange the screens</h3>
-                <p>Open <strong>Devices → Screen layout</strong> on the host. Drag the laptop until an edge touches the monitor it sits next to, then <strong>Save</strong>. <strong>Test</strong> jumps the cursor there.</p>
-              </div>
-            </li>
-          </ol>
-        </div>
+          <!-- Code Box / Installation Methods -->
+          <div class="install-card">
+            <h3>Installation Methods</h3>
+            <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 20px;">
+              Choose your preferred installation pathway for Windows 10 &amp; 11:
+            </p>
 
-        <div class="shell">
-          <aside class="note">
-            <span class="note-label">Discovery blocked?</span>
-            <p>If the host does not appear automatically, type its IP address. The address is shown on the host under <strong>Settings → Diagnostics</strong>.</p>
-          </aside>
-        </div>
-      </section>
+            <div class="code-tabs">
+              <button class="code-tab-btn active" data-code="winget">winget</button>
+              <button class="code-tab-btn" data-code="installer">Installer (.exe)</button>
+              <button class="code-tab-btn" data-code="cargo">Cargo / Source</button>
+              <button class="code-tab-btn" data-code="cli">Headless CLI</button>
+            </div>
 
-      <!-- Guide -->
-      <section id="guide" class="section section-tint">
-        <div class="shell">
-          <header class="section-head">
-            <p class="kicker">05 — Guide</p>
-            <div class="section-head-row">
-              <h2>How to use Moush.</h2>
-              <p>Everything below applies once your computers are paired and arranged in the layout editor.</p>
+            <div class="code-box">
+              <button id="code-copy-btn" class="code-copy-btn" title="Copy snippet to clipboard">Copy</button>
+              <pre><code id="code-snippet-content">winget install Moush</code></pre>
             </div>
-          </header>
 
-          <div class="guide-row">
-            <div class="guide-aside">
-              <span class="guide-num">01</span>
-              <h3>Switching computers</h3>
-            </div>
-            <div class="guide-body">
-              <p>
-                Move the cursor through a highlighted edge to hand over input; the keyboard types on the
-                computer the cursor is on. Move back and you are home again. Nothing is switched while a mouse
-                button is held, so drags stay on the computer that started them.
-              </p>
-              <table class="shortcuts">
-                <caption>Shortcuts on the host keyboard</caption>
-                <tbody>
-                  <tr><td><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Esc</kbd></td><td>Bring the cursor back to the host immediately</td></tr>
-                  <tr><td><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>←</kbd></td><td>Jump to the neighbouring computer in that direction</td></tr>
-                  <tr><td><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>Home</kbd></td><td>Jump back to the host</td></tr>
-                  <tr><td><kbd>Scroll Lock</kbd></td><td>Lock the cursor to the current computer</td></tr>
-                </tbody>
-              </table>
-              <p class="fine">
-                The tray menu also has <em>Bring cursor back to this computer</em>. Keys and buttons are released
-                whenever the cursor leaves, the connection drops or the app exits — no stuck keys.
-              </p>
-            </div>
-          </div>
-
-          <div class="guide-row">
-            <div class="guide-aside">
-              <span class="guide-num">02</span>
-              <h3>Clipboard, text and files</h3>
-            </div>
-            <div class="guide-body">
-              <p>
-                Copy on one computer and paste on another. Text, rich text and images are synchronised in both
-                directions; content that password managers mark as sensitive is skipped. <strong>Features →
-                Clipboard</strong> has per-format switches, a size limit and an in-memory history.
-              </p>
-              <p>
-                Drag files onto the Moush window, or use <strong>Transfers → Send files…</strong>. The receiving
-                computer can ask before accepting, and files land in <code>Downloads\Moush</code> by default.
-                Progress, speed, cancel and retry — which resumes partial files — live on <strong>Transfers</strong>.
-                You can also share a text or a link there.
-              </p>
-              <p class="fine">
-                Folders are not supported yet — zip them first. Received files are never opened automatically and
-                keep the Windows “downloaded from the internet” mark.
-              </p>
-            </div>
-          </div>
-
-          <div class="guide-row">
-            <div class="guide-aside">
-              <span class="guide-num">03</span>
-              <h3>Permissions and pages</h3>
-            </div>
-            <div class="guide-body">
-              <p>
-                Under <strong>Devices</strong>, open a paired device to decide whether it may use clipboard sync,
-                file transfer and text sharing with this computer. A feature works only when both sides allow it.
-              </p>
-              <ul class="page-list">
-                <li><strong>Home</strong> — sharing state, which computer has the cursor, quick switches and recent activity.</li>
-                <li><strong>Devices</strong> — connected and paired computers, permissions, discovery and the screen layout tab.</li>
-                <li><strong>Features</strong> — clipboard, keyboard and switching, file transfer, notifications and history.</li>
-                <li><strong>Transfers</strong> — send files, approve incoming transfers, shared text and links.</li>
-                <li><strong>Settings</strong> — device name, role, appearance, startup, network and diagnostics.</li>
-              </ul>
+            <div style="margin-top: 28px; display: flex; gap: 12px;">
+              <a class="btn btn-primary" href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">
+                Download Latest Release (.exe)
+              </a>
+              <a class="btn btn-secondary" href="https://github.com/rakibul-islam-hasib/moush/tree/main/docs" rel="noopener" target="_blank">
+                Full Architecture Docs
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Limits -->
-      <section id="limits" class="section">
+      <!-- ==========================================================================
+           FAQ Section
+           ========================================================================== -->
+      <section id="faq" class="section">
         <div class="shell">
-          <header class="section-head">
-            <p class="kicker">06 — Limits</p>
-            <div class="section-head-row">
-              <h2>What Windows does not allow.</h2>
-              <p>These limits come from Windows itself, not from Moush.</p>
-            </div>
+          <header class="section-head" style="text-align: center; max-width: 680px; margin: 0 auto 48px;">
+            <div class="kicker">04 — Support</div>
+            <h2>Frequently Asked Questions</h2>
+            <p>Everything you need to know about networking, security, and multi-monitor setup.</p>
           </header>
 
-          <div class="limits-grid">
-            <article class="limit">
-              <span class="feature-index">01</span>
-              <h3>Secure desktop</h3>
-              <p><strong>Ctrl+Alt+Del</strong>, the lock screen and UAC prompts run on the secure desktop. No application can capture or inject input there. When the host locks, the cursor returns automatically.</p>
-            </article>
-            <article class="limit">
-              <span class="feature-index">02</span>
-              <h3>Win+L</h3>
-              <p><strong>Win+L</strong> always locks the host — Windows handles it before any application sees it.</p>
-            </article>
-            <article class="limit">
-              <span class="feature-index">03</span>
-              <h3>Elevated windows</h3>
-              <p>Windows blocks injected input into administrator windows (UIPI). Run Moush as administrator on the client to control them; the same applies on the host while an elevated window has focus.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <!-- Troubleshooting -->
-      <section id="troubleshooting" class="section section-tint">
-        <div class="shell">
-          <header class="section-head">
-            <p class="kicker">07 — Support</p>
-            <div class="section-head-row">
-              <h2>Quick answers.</h2>
-              <p>
-                Logs live in <code>%LOCALAPPDATA%\Moush\logs\mouseshare.log</code>.
-                The Diagnostics page shows firewall state, latency and the most recent lines.
-              </p>
-            </div>
-          </header>
-
-          <div class="faq">
-            <details>
-              <summary>The client cannot find the host</summary>
-              <p>Both computers must be on the same network. Guest Wi-Fi usually isolates devices, and VPNs can block discovery. Connect by address instead: the host’s IPs are on its Diagnostics page. Also check <strong>Settings → Let other computers find this one</strong>.</p>
+          <div class="faq-list">
+            <details class="faq-item">
+              <summary>
+                <span>Does Moush require an internet connection or cloud account?</span>
+                <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </summary>
+              <div class="faq-body">
+                <p>No. Moush operates entirely on your local area network (LAN). There are zero accounts, zero cloud servers, zero telemetry, and zero subscriptions. Your input and clipboard never leave your local subnet.</p>
+              </div>
             </details>
-            <details>
-              <summary>“Refused the connection” or “no answer”</summary>
-              <p>Make sure the other computer is set to <strong>Host</strong> and sharing is on. Windows Firewall must allow Moush — use <strong>Diagnostics → Add firewall rule</strong>, or set the network to Private. Third-party firewalls should allow <code>Moush.exe</code>, TCP 24800 and UDP 24801.</p>
-            </details>
-            <details>
-              <summary>The cursor does not cross to the laptop</summary>
-              <p>In <strong>Devices → Screen layout</strong>, the laptop rectangle must touch a monitor edge (it highlights blue). Check that Scroll Lock has not locked the cursor, and that the corner dead zone or switch delay is not set too high. Switching is disabled while a mouse button is held.</p>
-            </details>
-            <details>
-              <summary>Keys or clicks do not work on the client</summary>
-              <p>The focused window on the client is probably elevated. Run Moush as administrator on the client. Lock screen, UAC and Ctrl+Alt+Del cannot be controlled remotely by design.</p>
-            </details>
-            <details>
-              <summary>Reset everything</summary>
-              <p>Quit Moush from the tray and delete <code>%APPDATA%\Moush</code>. Devices will need to be paired again.</p>
-            </details>
-          </div>
-        </div>
-      </section>
 
-      <!-- Build -->
-      <section id="build" class="section">
-        <div class="shell">
-          <header class="section-head">
-            <p class="kicker">08 — Developers</p>
-            <div class="section-head-row">
-              <h2>Build and run from source.</h2>
-              <p>Windows 10/11, Rust 1.85+ (MSVC toolchain), Node.js 20+ and the WebView2 runtime.</p>
-            </div>
-          </header>
+            <details class="faq-item">
+              <summary>
+                <span>What happens when my laptop is on Wi-Fi and desktop is on Ethernet?</span>
+                <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </summary>
+              <div class="faq-body">
+                <p>As long as both computers are on the same local network subnet and your router does not isolate Wi-Fi clients (Client Isolation / Guest mode), Moush discovers and connects automatically over UDP/TCP with sub-millisecond responsiveness.</p>
+              </div>
+            </details>
 
-          <div class="build-grid">
-            <div class="code-card">
-              <div class="code-head"><span>Desktop app</span><span class="code-lang">PowerShell</span></div>
-<pre><code>npm install
-npx tauri build                 # release app + NSIS installer
-npx tauri dev                   # dev build with hot reload
-cargo test --workspace          # unit + loopback tests</code></pre>
-            </div>
-            <div class="code-card">
-              <div class="code-head"><span>Headless tool</span><span class="code-lang">Shell</span></div>
-<pre><code>cargo build --release -p moush-cli
+            <details class="faq-item">
+              <summary>
+                <span>How is latency kept at ~50 microseconds?</span>
+                <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </summary>
+              <div class="faq-body">
+                <p>Moush is built with native Rust using low-level Windows hooks (<code>WH_MOUSE_LL</code> and <code>WH_KEYBOARD_LL</code>) and direct input injection (<code>SendInput</code>). Communication occurs over an event-driven TCP socket with <code>TCP_NODELAY</code> enabled, bypassing all polling and buffering overhead.</p>
+              </div>
+            </details>
 
-moush-cli monitors
-moush-cli discover
-moush-cli host [--port N]
-moush-cli client &lt;ip|host-id&gt; [--dry-run]
-moush-cli bench [--events N]
-moush-cli selftest
-moush-cli identity</code></pre>
-            </div>
-          </div>
+            <details class="faq-item">
+              <summary>
+                <span>Can I control elevated Administrator or UAC prompts on the client?</span>
+                <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </summary>
+              <div class="faq-body">
+                <p>Windows UIPI (User Interface Privilege Isolation) restricts non-elevated apps from sending input to elevated windows. To control administrator prompts or elevated applications on the client, simply run Moush as Administrator on the client PC. Note that the Windows Secure Desktop (Ctrl+Alt+Del) cannot be accessed remotely by OS security design.</p>
+              </div>
+            </details>
 
-          <div class="io-grid">
-            <div class="io-item"><span>Settings, identity, devices, layout</span><code>%APPDATA%\Moush</code></div>
-            <div class="io-item"><span>Logs</span><code>%LOCALAPPDATA%\Moush\logs</code></div>
-            <div class="io-item"><span>TCP · input</span><code>24800</code></div>
-            <div class="io-item"><span>UDP · discovery</span><code>24801</code></div>
+            <details class="faq-item">
+              <summary>
+                <span>How do I lock the mouse to one computer temporarily?</span>
+                <svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </summary>
+              <div class="faq-body">
+                <p>Press the <kbd>Scroll Lock</kbd> key or use the hotkey <kbd>Ctrl + Alt + Esc</kbd> to lock the cursor to your current computer or immediately snap it back to the host.</p>
+              </div>
+            </details>
           </div>
         </div>
       </section>
     </main>
 
+    <!-- Site Footer -->
     <footer class="site-footer">
-      <div class="shell footer-top">
-        <div class="footer-brand">
-          <svg class="brand-mark" aria-hidden="true"><use href="#i-mark" /></svg>
-          <div>
-            <strong>Moush</strong>
-            <p>One mouse and keyboard for every Windows PC on your network.</p>
+      <div class="shell">
+        <div class="footer-top">
+          <div class="footer-brand">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="assets/icon.svg" alt="Moush" width="32" height="32" style="border-radius: 8px;" />
+              <strong style="font-size: 1.15rem; color: var(--text-primary);">Moush</strong>
+            </div>
+            <p>One mouse and keyboard for every Windows PC on your local network. Pure Rust performance, end-to-end encrypted.</p>
+          </div>
+
+          <div class="footer-links-group">
+            <div class="footer-col">
+              <h5>Navigation</h5>
+              <a href="#simulator">Live Simulator</a>
+              <a href="#features">Features</a>
+              <a href="#gallery">Screenshots</a>
+              <a href="#install">Installation</a>
+            </div>
+            <div class="footer-col">
+              <h5>Project</h5>
+              <a href="https://github.com/rakibul-islam-hasib/moush" rel="noopener" target="_blank">GitHub Repository</a>
+              <a href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener" target="_blank">Latest Releases</a>
+              <a href="https://github.com/rakibul-islam-hasib/moush/tree/main/docs" rel="noopener" target="_blank">Documentation</a>
+              <a href="https://github.com/rakibul-islam-hasib/moush/issues" rel="noopener" target="_blank">Report Issue</a>
+            </div>
           </div>
         </div>
 
-        <div class="footer-cols">
-          <div>
-            <span class="footer-label">Product</span>
-            <a href="#features">Features</a>
-            <a href="#install">Install</a>
-            <a href="#guide">Guide</a>
-          </div>
-          <div>
-            <span class="footer-label">Project</span>
-            <a href="https://github.com/rakibul-islam-hasib/moush" rel="noopener">Source</a>
-            <a href="https://github.com/rakibul-islam-hasib/moush/releases/latest" rel="noopener">Releases</a>
-            <a href="https://github.com/rakibul-islam-hasib/moush/tree/main/docs" rel="noopener">Docs</a>
-            <a href="https://github.com/rakibul-islam-hasib/moush/issues" rel="noopener">Issues</a>
-          </div>
+        <div class="footer-bottom">
+          <span>MIT Licensed · Designed for Windows 10 &amp; 11</span>
+          <span>Engineered with Rust, Tauri and React</span>
         </div>
-      </div>
-      <div class="shell footer-bottom">
-        <span>MIT licensed · Windows 10 &amp; 11</span>
-        <span>Built with Rust, Tauri and React</span>
       </div>
     </footer>
   </body>

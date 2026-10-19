@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="standalone-title">
+  <title id="standalone-title">Mouse Share Standalone Symbol</title>
+  <defs>
+    <!-- Screen 1 (Host / Left Screen) -->
+    <linearGradient id="st-s1-glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14213D"/>
+      <stop offset="100%" stop-color="#091122"/>
+    </linearGradient>
+    <linearGradient id="st-s1-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA" stroke-opacity="0.6"/>
+      <stop offset="100%" stop-color="#1D4ED8" stroke-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Screen 2 (Target / Right Screen) -->
+    <linearGradient id="st-s2-glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1C3563"/>
+      <stop offset="60%" stop-color="#112242"/>
+      <stop offset="100%" stop-color="#091326"/>
+    </linearGradient>
+    <linearGradient id="st-s2-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#818CF8" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#1E293B" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Stream Conduit -->
+    <linearGradient id="st-stream" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="40%" stop-color="#38BDF8"/>
+      <stop offset="70%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Perfectly Centered Visual Mass -->
+  <g transform="translate(0, 16)">
+    <!-- Screen 1 (Left - Workstation A) -->
+    <g id="st-screen-host">
+      <rect x="88" y="192" width="216" height="146" rx="20" fill="url(#st-s1-glass)" stroke="url(#st-s1-rim)" stroke-width="3"/>
+      <path d="M 108 196 L 284 196" stroke="#60A5FA" stroke-opacity="0.35" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Screen 2 Vector Cutout Plate -->
+    <rect x="202" y="128" width="224" height="154" rx="24" fill="#03060E" opacity="0.85"/>
+
+    <!-- Screen 2 (Right - Workstation B) -->
+    <g id="st-screen-client">
+      <rect x="208" y="134" width="216" height="146" rx="20" fill="url(#st-s2-glass)" stroke="url(#st-s2-rim)" stroke-width="3"/>
+      <path d="M 228 138 L 404 138" stroke="#00F0FF" stroke-opacity="0.65" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Flowing Connection Line -->
+    <g id="st-connection-line">
+      <path d="M 148 268 C 196 304 238 166 368 204" fill="none" stroke="url(#st-stream)" stroke-width="24" stroke-linecap="round"/>
+      <circle cx="148" cy="268" r="9" fill="#00F0FF"/>
+      <circle cx="368" cy="204" r="9" fill="#A855F7"/>
+    </g>
+
+    <!-- Hero White Cursor -->
+    <g id="st-cursor-hero" transform="translate(240, 190) rotate(-15)">
+      <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#020409" stroke="#020409" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#FFFFFF"/>
+      <path d="M 0 0 L 0 72 L 18 54 L 0 0 Z" fill="#F1F5F9" opacity="0.9"/>
+    </g>
+  </g>
+</svg>

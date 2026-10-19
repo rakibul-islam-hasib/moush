@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="mono-d-title">
+  <title id="mono-d-title">Mouse Share - Monochrome Dark</title>
+  <g transform="translate(0, 16)">
+    <!-- Screen 1 (Host) -->
+    <rect x="88" y="192" width="216" height="146" rx="20" fill="none" stroke="#0F172A" stroke-width="16"/>
+
+    <!-- Screen 2 Cutout Mask + Outline -->
+    <rect x="200" y="126" width="232" height="162" rx="24" fill="#FFFFFF"/>
+    <rect x="208" y="134" width="216" height="146" rx="20" fill="none" stroke="#0F172A" stroke-width="16"/>
+
+    <!-- Connection Flow Line -->
+    <path d="M 148 268 C 196 304 238 166 368 204" fill="none" stroke="#0F172A" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="148" cy="268" r="9" fill="#0F172A"/>
+    <circle cx="368" cy="204" r="9" fill="#0F172A"/>
+
+    <!-- Hero Cursor with Knockout Border -->
+    <g transform="translate(240, 190) rotate(-15)">
+      <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M 0 0 L 0 88 L 22 66 L 44 110 L 64 100 L 42 56 L 76 56 Z" fill="#0F172A"/>
+    </g>
+  </g>
+</svg>
