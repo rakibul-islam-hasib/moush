@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="icon-c-title">
+  <title id="icon-c-title">Moush App Icon — Concept C</title>
+  <defs>
+    <linearGradient id="tile-bg-c" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="50%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="tile-rim-c" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#818CF8" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#1E293B" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="screen-grad-c" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="cursor-grad-c" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+    <filter id="cursor-glow-c" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#00F0FF" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  <rect x="36" y="36" width="440" height="440" rx="100" fill="url(#tile-bg-c)"/>
+  <rect x="36" y="36" width="440" height="440" rx="100" fill="none" stroke="url(#tile-rim-c)" stroke-width="2.5"/>
+  <circle cx="256" cy="240" r="160" fill="#00F0FF" opacity="0.1"/>
+  
+  <g transform="translate(128, 128)">
+    <!-- Screens in subtle slate gradient -->
+    <path fill="url(#screen-grad-c)" fill-rule="evenodd" d="
+      M 40 56
+      H 106
+      C 113.7 56 120 62.3 120 70
+      V 186
+      C 120 193.7 113.7 200 106 200
+      H 40
+      C 32.3 200 26 193.7 26 186
+      V 70
+      C 26 62.3 32.3 56 40 56
+      Z
+      M 150 56
+      H 216
+      C 223.7 56 230 62.3 230 70
+      V 186
+      C 230 193.7 223.7 200 216 200
+      H 150
+      C 142.3 200 136 193.7 136 186
+      V 164
+      L 164 136
+      H 192
+      L 136 80
+      V 70
+      C 136 62.3 142.3 56 150 56
+      Z
+    "/>
+    <!-- Glowing Electric Cyan Transit Cursor -->
+    <path fill="url(#cursor-grad-c)" filter="url(#cursor-glow-c)" d="
+      M 104 102
+      H 172
+      L 144 130
+      L 168 154
+      L 152 170
+      L 128 146
+      L 104 170
+      Z
+    "/>
+  </g>
+</svg>

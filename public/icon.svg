@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="app-title">
+  <title id="app-title">Moush Application Icon — Infinity Glide</title>
+  <defs>
+    <!-- Background Canvas: Deep Obsidian Slate (No Blur, No Shadow) -->
+    <linearGradient id="b-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="50%" stop-color="#080E1A"/>
+      <stop offset="100%" stop-color="#020408"/>
+    </linearGradient>
+
+    <!-- Acrylic Specular Rim Highlight -->
+    <linearGradient id="b-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#818CF8" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#1E293B" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- Continuous Infinity Flow Gradient: Electric Cyan -> Sky Blue -> Royal Azure -> Vivid Indigo -->
+    <linearGradient id="b-flow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="32%" stop-color="#38BDF8"/>
+      <stop offset="68%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#6366F1"/>
+    </linearGradient>
+
+    <!-- Clean Vector Specular Facet on Arrowhead -->
+    <linearGradient id="b-facet" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. Master Windows 11 Squircle Base (880x880, 72px safe margin) -->
+  <rect x="72" y="72" width="880" height="880" rx="208" fill="url(#b-bg)" stroke="url(#b-rim)" stroke-width="5"/>
+
+  <!-- 2. Hero Infinity Continuum Ribbon -->
+  <g transform="translate(112, 112) scale(3.125)">
+    <path fill="url(#b-flow)" fill-rule="evenodd" d="
+      M 80 64
+      C 44.7 64 16 92.7 16 128
+      C 16 163.3 44.7 192 80 192
+      C 106 192 128 176 142 152
+      L 170 186
+      C 192 186 214 174 226 156
+      L 240 170
+      V 124
+      H 194
+      L 208 138
+      C 198 152 184 160 170 160
+      C 156 160 144 150 134 138
+      L 122 124
+      C 134 108 152 96 170 96
+      C 186 96 200 104 210 118
+      L 230 98
+      C 216 78 194 64 170 64
+      C 144 64 122 78 108 102
+      C 96 79 89 64 80 64
+      Z
+      M 80 96
+      C 97.7 96 112 110.3 112 128
+      C 112 145.7 97.7 160 80 160
+      C 62.3 160 48 145.7 48 128
+      C 48 110.3 62.3 96 80 96
+      Z
+    "/>
+    <!-- Specular facet highlight on arrow head -->
+    <path fill="url(#b-facet)" fill-opacity="0.32" d="
+      M 194 124
+      L 240 124
+      L 240 170
+      Z
+    "/>
+  </g>
+</svg>

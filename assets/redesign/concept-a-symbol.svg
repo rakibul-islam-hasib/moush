@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title-a">
+  <title id="title-a">Moush Concept A — The Portal M</title>
+  <!-- Architectural Portal M: Two Display Monoliths with Dynamic Cursor Bridge -->
+  <path fill="#0F172A" fill-rule="evenodd" d="
+    M 44 44
+    C 37.4 44 32 49.4 32 56
+    V 200
+    C 32 206.6 37.4 212 44 212
+    H 76
+    C 82.6 212 88 206.6 88 200
+    V 116
+    L 128 156
+    L 168 116
+    V 200
+    C 168 206.6 173.4 212 180 212
+    H 212
+    C 218.6 212 224 206.6 224 200
+    V 56
+    C 224 49.4 218.6 44 212 44
+    H 180
+    L 128 96
+    L 76 44
+    Z
+  "/>
+</svg>

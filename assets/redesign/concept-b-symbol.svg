@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title-b">
+  <title id="title-b">Moush Concept B — The Infinity Glide</title>
+  <!-- Continuous Horizontal Infinity Ribbon with Integrated Cursor -->
+  <path fill="#0F172A" fill-rule="evenodd" d="
+    M 80 64
+    C 44.7 64 16 92.7 16 128
+    C 16 163.3 44.7 192 80 192
+    C 106 192 128 176 142 152
+    L 170 186
+    C 192 186 214 174 226 156
+    L 240 170
+    V 124
+    H 194
+    L 208 138
+    C 198 152 184 160 170 160
+    C 156 160 144 150 134 138
+    L 122 124
+    C 134 108 152 96 170 96
+    C 186 96 200 104 210 118
+    L 230 98
+    C 216 78 194 64 170 64
+    C 144 64 122 78 108 102
+    C 96 79 89 64 80 64
+    Z
+    M 80 96
+    C 97.7 96 112 110.3 112 128
+    C 112 145.7 97.7 160 80 160
+    C 62.3 160 48 145.7 48 128
+    C 48 110.3 62.3 96 80 96
+    Z
+  "/>
+</svg>

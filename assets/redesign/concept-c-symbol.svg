@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title-c">
+  <title id="title-c">Moush Concept C — The Threshold</title>
+  <!-- Dual Displays with Precision Negative-Space Cutout for Hero Cursor -->
+  <path fill="#0F172A" fill-rule="evenodd" d="
+    M 40 56
+    H 106
+    C 113.7 56 120 62.3 120 70
+    V 186
+    C 120 193.7 113.7 200 106 200
+    H 40
+    C 32.3 200 26 193.7 26 186
+    V 70
+    C 26 62.3 32.3 56 40 56
+    Z
+    M 150 56
+    H 216
+    C 223.7 56 230 62.3 230 70
+    V 186
+    C 230 193.7 223.7 200 216 200
+    H 150
+    C 142.3 200 136 193.7 136 186
+    V 164
+    L 164 136
+    H 192
+    L 136 80
+    V 70
+    C 136 62.3 142.3 56 150 56
+    Z
+    M 104 102
+    H 172
+    L 144 130
+    L 168 154
+    L 152 170
+    L 128 146
+    L 104 170
+    Z
+  "/>
+</svg>
