@@ -438,13 +438,18 @@ html[data-motion="reduce"] .conn-node::after {
   gap: var(--space-2);
 }
 
+/* Icon and switch on top, label underneath at full width (no squeezed, wrapping titles). */
 .quick-tile {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-areas:
+    "icon switch"
+    "text text";
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  row-gap: var(--space-3);
   min-height: 72px;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--card-stroke);
   border-radius: var(--radius-md);
   background: var(--card);
@@ -473,8 +478,8 @@ html[data-motion="reduce"] .conn-node::after {
 }
 
 .quick-tile-icon {
+  grid-area: icon;
   display: grid;
-  flex: none;
   place-items: center;
   width: 40px;
   height: 40px;
@@ -492,8 +497,8 @@ html[data-motion="reduce"] .conn-node::after {
 }
 
 .quick-tile-text {
+  grid-area: text;
   display: flex;
-  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
@@ -514,8 +519,9 @@ html[data-motion="reduce"] .conn-node::after {
 
 /* A small switch drawn inside the tile (the tile itself is the role="switch"). */
 .quick-tile-switch {
+  grid-area: switch;
   position: relative;
-  flex: none;
+  margin-top: 2px;
   width: 36px;
   height: 18px;
   border: 1px solid var(--control-strong-stroke);

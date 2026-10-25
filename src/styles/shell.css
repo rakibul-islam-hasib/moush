@@ -1,11 +1,126 @@
+/* ---------------------------------------------------------------- Window frame */
+
+.window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.window-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Title bar: draws over the window background (Mica when on); the native frame is off. */
+.titlebar {
+  position: relative;
+  z-index: 25;
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: var(--titlebar-height);
+  padding-left: 8px;
+  color: var(--text);
+}
+
+.titlebar-nav {
+  flex: none;
+  width: 36px;
+  height: 32px;
+}
+
+.titlebar-brand {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+  padding-left: 10px;
+}
+
+.titlebar-brand.is-solo {
+  padding-left: 8px;
+}
+
+.titlebar-brand .logo {
+  flex: none;
+  pointer-events: none;
+}
+
+.titlebar-title {
+  overflow: hidden;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar.is-inactive .titlebar-title,
+.titlebar.is-inactive .caption-btn {
+  color: var(--text-tertiary);
+}
+
+.titlebar.is-inactive .titlebar-brand .logo {
+  opacity: 0.6;
+}
+
+.titlebar-caption {
+  display: flex;
+  flex: none;
+  align-self: stretch;
+}
+
+.caption-btn {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: default;
+  transition:
+    background-color var(--dur-fast) linear,
+    color var(--dur-fast) linear;
+}
+
+.caption-btn:hover {
+  background: var(--subtle-hover);
+  color: var(--text);
+}
+
+.caption-btn:active {
+  background: var(--subtle-pressed);
+  color: var(--text-secondary);
+}
+
+.caption-btn.caption-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.caption-btn.caption-close:active {
+  background: rgba(196, 43, 28, 0.9);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (forced-colors: active) {
+  .caption-btn:hover,
+  .caption-btn.caption-close:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
 /* ---------------------------------------------------------------- App frame */
 
 .app {
   --nav-width: var(--nav-expanded);
-  position: relative;
   display: grid;
   grid-template-columns: var(--nav-width) minmax(0, 1fr);
-  height: 100%;
   transition: grid-template-columns var(--dur-slow) var(--ease);
 }
 
@@ -73,42 +188,9 @@
   }
 }
 
-.nav-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 48px;
-  padding: 0 6px;
-}
-
-.nav-toggle {
-  flex: none;
-  width: 36px;
-  height: 36px;
-}
-
-.nav-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  transition: opacity var(--dur) linear;
-}
-
-.nav-brand .logo {
-  flex: none;
-}
-
-.nav-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-strong);
-  white-space: nowrap;
-}
-
 .nav-list-wrap {
   position: relative;
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .nav-list {
@@ -307,16 +389,10 @@
 }
 
 /* Compact rail: icons only. */
-.nav.is-compact .nav-brand,
 .nav.is-compact .nav-label,
 .nav.is-compact .nav-count,
 .nav.is-compact .nav-status-text {
   display: none;
-}
-
-.nav.is-compact .nav-header {
-  justify-content: center;
-  padding: 0;
 }
 
 .nav.is-compact .nav-item {

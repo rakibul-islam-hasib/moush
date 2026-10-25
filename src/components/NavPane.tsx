@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { backend, type AppSnapshot } from "../api";
 import { readFlag, useMediaQuery, writeFlag } from "../hooks/useMediaQuery";
 import { cx } from "../lib/cx";
@@ -6,7 +6,6 @@ import type { NavSection, PageId } from "../lib/navigation";
 import { shortStatus } from "../lib/status";
 import { StatusDot } from "./Badge";
 import { Icon, type IconName } from "./Icon";
-import { Logo } from "./Logo";
 
 const ITEMS: { id: NavSection; label: string; icon: IconName }[] = [
   { id: "home", label: "Home", icon: "home" },
@@ -40,30 +39,60 @@ function onListKeyDown(e: KeyboardEvent<HTMLUListElement>) {
   }
 }
 
+/** Collapse state of the pane; shared with the title bar, which holds the toggle button. */
+export interface NavPaneState {
+  expanded: boolean;
+  overlay: boolean;
+  paneId: string;
+  toggle: () => void;
+  closeOverlay: () => void;
+}
+
+/**
+ * Wide windows show labels (collapsible to an icon rail, remembered); narrow windows show
+ * the rail and open the full pane as an overlay.
+ */
+export function useNavPane(forceCollapsed = false): NavPaneState {
+  const wide = useMediaQuery(WIDE_QUERY);
+  const [collapsed, setCollapsed] = useState(() => forceCollapsed || readFlag(COLLAPSED_KEY, false));
+  const [overlay, setOverlay] = useState(false);
+  const paneId = useId();
+
+  useEffect(() => {
+    if (wide) setOverlay(false);
+  }, [wide]);
+
+  const toggle = useCallback(() => {
+    if (wide) {
+      setCollapsed((c) => {
+        writeFlag(COLLAPSED_KEY, !c);
+        return !c;
+      });
+    } else {
+      setOverlay((o) => !o);
+    }
+  }, [wide]);
+  const closeOverlay = useCallback(() => setOverlay(false), []);
+
+  const expanded = wide ? !collapsed : overlay;
+  return useMemo(() => ({ expanded, overlay, paneId, toggle, closeOverlay }), [expanded, overlay, paneId, toggle, closeOverlay]);
+}
+
 interface NavPaneProps {
   section: NavSection;
   snapshot: AppSnapshot;
   onNavigate: (page: PageId) => void;
-  /** Dev preview: start collapsed. */
-  forceCollapsed?: boolean;
+  pane: NavPaneState;
 }
 
-/**
- * Collapsible navigation pane. Wide windows show labels (collapsible to an icon rail);
- * narrow windows show the rail and open the full pane as an overlay. A single selection
- * indicator slides between items.
- */
-export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, forceCollapsed = false }: NavPaneProps) {
-  const wide = useMediaQuery(WIDE_QUERY);
-  const [collapsed, setCollapsed] = useState(() => forceCollapsed || readFlag(COLLAPSED_KEY, false));
-  const [overlay, setOverlay] = useState(false);
+/** Navigation pane. A single selection indicator slides between items. */
+export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, pane }: NavPaneProps) {
+  const { expanded, overlay, paneId, closeOverlay } = pane;
   const listRef = useRef<HTMLUListElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [indicatorTop, setIndicatorTop] = useState<number | null>(null);
   const [animate, setAnimate] = useState(false);
-  const paneId = useId();
 
-  const expanded = wide ? !collapsed : overlay;
   const status = shortStatus(snapshot);
   const mock = backend.mock;
   const live = snapshot.features.transfers.filter((t) => t.state === "active" || t.state === "pending");
@@ -79,18 +108,15 @@ export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, fo
         : undefined,
   };
 
-  useEffect(() => {
-    if (wide) setOverlay(false);
-  }, [wide]);
-
-  // Close the overlay on Escape or a click outside the pane.
+  // Close the overlay on Escape or a click outside the pane (the title bar toggle handles itself).
   useEffect(() => {
     if (!overlay) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") setOverlay(false);
+      if (e.key === "Escape") closeOverlay();
     };
     const onPointer = (e: PointerEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) setOverlay(false);
+      const target = e.target as Element;
+      if (navRef.current && !navRef.current.contains(target) && !target.closest?.(".titlebar-nav")) closeOverlay();
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointer);
@@ -98,7 +124,7 @@ export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, fo
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointer);
     };
-  }, [overlay]);
+  }, [overlay, closeOverlay]);
 
   useLayoutEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-nav="${section}"]`);
@@ -113,38 +139,9 @@ export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, fo
     return () => cancelAnimationFrame(id);
   }, [indicatorTop, animate]);
 
-  const toggle = () => {
-    if (wide) {
-      setCollapsed((c) => {
-        writeFlag(COLLAPSED_KEY, !c);
-        return !c;
-      });
-    } else {
-      setOverlay((o) => !o);
-    }
-  };
-
   return (
     <nav ref={navRef} className={cx("nav", expanded ? "is-expanded" : "is-compact", overlay && "is-overlay")} aria-label="Main">
       <div className="nav-panel" id={paneId}>
-        <div className="nav-header">
-          <button
-            type="button"
-            className="btn btn-subtle btn-icon nav-toggle"
-            aria-label={expanded ? "Collapse navigation" : "Expand navigation"}
-            aria-expanded={expanded}
-            aria-controls={paneId}
-            title={expanded ? "Collapse navigation" : "Expand navigation"}
-            onClick={toggle}
-          >
-            <Icon name="menu" />
-          </button>
-          <span className="nav-brand">
-            <Logo size={20} />
-            <span className="nav-title">Moush</span>
-          </span>
-        </div>
-
         <div className="nav-list-wrap">
         {indicatorTop !== null && (
           <span className={cx("nav-indicator", animate && "is-animated")} style={{ transform: `translateY(${indicatorTop}px)` }} aria-hidden="true" />
@@ -164,7 +161,7 @@ export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, fo
                   title={expanded ? undefined : badge ? `${item.label} — ${badge.label}` : item.label}
                   onClick={() => {
                     onNavigate(item.id);
-                    setOverlay(false);
+                    closeOverlay();
                   }}
                 >
                   <span className="nav-item-icon">

@@ -58,6 +58,7 @@
   --ease-spring: cubic-bezier(0.3, 1.4, 0.6, 1);
 
   /* ---- Layout */
+  --titlebar-height: 40px;
   --nav-expanded: 252px;
   --nav-compact: 52px;
   --page-max: 1000px;

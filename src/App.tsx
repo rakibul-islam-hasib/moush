@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, type FeaturesSnapshot } from "./api";
-import { NavPane } from "./components/NavPane";
+import { NavPane, useNavPane } from "./components/NavPane";
 import { PairingDialog } from "./components/PairingDialog";
+import { TitleBar } from "./components/TitleBar";
 import { DropOverlay, SendTargetDialog, noTargetReason, targetArg } from "./components/SendFiles";
 import { AppProvider, useSettings, useSnapshot } from "./hooks/useApp";
 import { useFileDrop } from "./hooks/useFileDrop";
@@ -65,6 +66,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>({ page: dev?.page ?? "home", anchor: dev?.expand && dev.expand !== "all" ? dev.expand : undefined });
   const [dropped, setDropped] = useState<string[] | null>(null);
   const contentRef = useRef<HTMLElement>(null);
+  const pane = useNavPane(dev?.navCollapsed);
 
   useThemeEffect(settings.theme);
   useMotionEffect(settings.appearance.motion);
@@ -119,10 +121,13 @@ function Shell() {
 
   if (snapshot.role === null) {
     return (
-      <>
-        <Onboarding onComplete={(role) => navigate(role === "client" ? "devices" : "home")} />
+      <div className="window">
+        <TitleBar />
+        <div className="window-body">
+          <Onboarding onComplete={(role) => navigate(role === "client" ? "devices" : "home")} />
+        </div>
         {pairing}
-      </>
+      </div>
     );
   }
 
@@ -131,24 +136,27 @@ function Shell() {
   const transitionKey = page === "layout" ? "devices" : page;
 
   return (
-    <div className="app">
-      <NavPane section={SECTION_OF[page]} snapshot={snapshot} onNavigate={navigate} forceCollapsed={dev?.navCollapsed} />
-      <main className="content" ref={contentRef} aria-label="Content">
-        <div className="page-transition" key={transitionKey}>
-          {page === "home" && <HomePage onNavigate={navigate} />}
-          {(page === "devices" || page === "layout") && <DevicesPage tab={page === "layout" ? "layout" : "devices"} onNavigate={navigate} />}
-          {page === "features" && <FeaturesPage onNavigate={navigate} anchor={route.anchor} expandAll={dev?.expand === "all"} />}
-          {page === "transfers" && <TransfersPage onNavigate={navigate} />}
-          {page === "settings" && <SettingsPage onNavigate={navigate} />}
-          {page === "diagnostics" && <DiagnosticsPage onNavigate={navigate} />}
-        </div>
-      </main>
-      {dragging && <DropOverlay snapshot={snapshot} settings={settings} />}
-      {dropped && (
-        <SendTargetDialog snapshot={snapshot} settings={settings} paths={dropped} onSent={() => undefined} onClose={() => setDropped(null)} />
-      )}
-      {live}
-      {pairing}
+    <div className="window">
+      <TitleBar nav={{ expanded: pane.expanded, controls: pane.paneId, onToggle: pane.toggle }} />
+      <div className="app window-body">
+        <NavPane section={SECTION_OF[page]} snapshot={snapshot} onNavigate={navigate} pane={pane} />
+        <main className="content" ref={contentRef} aria-label="Content">
+          <div className="page-transition" key={transitionKey}>
+            {page === "home" && <HomePage onNavigate={navigate} />}
+            {(page === "devices" || page === "layout") && <DevicesPage tab={page === "layout" ? "layout" : "devices"} onNavigate={navigate} />}
+            {page === "features" && <FeaturesPage onNavigate={navigate} anchor={route.anchor} expandAll={dev?.expand === "all"} />}
+            {page === "transfers" && <TransfersPage onNavigate={navigate} />}
+            {page === "settings" && <SettingsPage onNavigate={navigate} />}
+            {page === "diagnostics" && <DiagnosticsPage onNavigate={navigate} />}
+          </div>
+        </main>
+        {dragging && <DropOverlay snapshot={snapshot} settings={settings} />}
+        {dropped && (
+          <SendTargetDialog snapshot={snapshot} settings={settings} paths={dropped} onSent={() => undefined} onClose={() => setDropped(null)} />
+        )}
+        {live}
+        {pairing}
+      </div>
     </div>
   );
 }
