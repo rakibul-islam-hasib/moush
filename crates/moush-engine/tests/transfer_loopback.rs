@@ -731,7 +731,7 @@ fn throughput_and_input_latency() {
         while rig.host.info(&id).state != State::Done {
             assert!(!rig.host.info(&id).state.is_final(), "{:?}", rig.host.info(&id));
             let t = mono_us();
-            let flags = if i.is_multiple_of(2) { key_flags::DOWN } else { 0 };
+            let flags = if i % 2 == 0 { key_flags::DOWN } else { 0 };
             handle.outbox.send(Outgoing { msg: Message::Key { vk: 0x41, scan: 0x1e, flags }, t_us: t }).unwrap();
             if let Ok(at) = injected.recv_timeout(Duration::from_secs(5)) {
                 ring.record(at.saturating_sub(t) as u32);
