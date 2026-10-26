@@ -4,6 +4,10 @@ description = "Share one mouse and keyboard between computers on your network"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "Moush"
@@ -21,3 +25,5 @@ serde_json.workspace = true
 # the Linux-only `x11`/`dbus`. Keep `compression`: the brotli decoder costs less than it saves.
 tauri = { version = "2.12", default-features = false, features = ["wry", "common-controls-v6", "compression", "tray-icon"] }
 tauri-plugin-single-instance = "2.5"
+# Already in the tree via the single-instance plugin; used by the dev-build "already running" check.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }

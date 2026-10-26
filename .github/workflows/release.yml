@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install UI dependencies
+        run: npm ci
+
+      - name: Build and draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Moush ${{ github.ref_name }}"
+          releaseBody: |
+            Windows 10/11 x64 installer.
+
+            The build is unsigned, so Windows SmartScreen may warn on first run. Verify the
+            SHA-256 checksum attached to this release.
+
+            See [CHANGELOG.md](https://github.com/rakibul-islam-hasib/moush/blob/main/CHANGELOG.md)
+            for what changed.
+          releaseDraft: true
+          prerelease: false
+          args: "--bundles nsis"

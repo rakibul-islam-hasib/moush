@@ -1,0 +1,91 @@
+name: Bug report
+description: Something in the app, installer or CLI does not work as documented.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please remove device names, IP addresses and anything
+        else you do not want public from logs before attaching them.
+
+        **Security issues:** do not open an issue. Follow the
+        [security policy](https://github.com/rakibul-islam-hasib/moush/blob/main/SECURITY.md)
+        and report privately.
+  - type: dropdown
+    id: role
+    attributes:
+      label: Which computer is affected?
+      options:
+        - Host (the computer with the mouse and keyboard)
+        - Client (the computer being controlled)
+        - Both / not sure
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      placeholder: Windows 11 24H2, build 26100.1742
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Moush version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running Moush?
+      options:
+        - Installed release build
+        - Built from source (`npx tauri dev` or `npx tauri build`)
+        - moush-cli
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and which feature was involved.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Pair a host and a client...
+        2. Move the cursor to...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Logs are in `%LOCALAPPDATA%\Moush\logs`. Redact device names and IP addresses.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those are reported privately).
+          required: true
+        - label: I am running the latest release or the current `main` branch.
+          required: true

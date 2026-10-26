@@ -7,6 +7,9 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
+authors = ["Rakibul Islam and the Moush contributors"]
+repository = "https://github.com/rakibul-islam-hasib/moush"
+homepage = "https://rakibul-islam-hasib.github.io/moush/"
 
 [workspace.dependencies]
 moush-core = { path = "crates/moush-core" }

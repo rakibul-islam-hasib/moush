@@ -30,6 +30,9 @@ fn main() {
     let logger = moush_engine::logger::init(Some(&paths.log_file()), level, cfg!(debug_assertions));
     log::info!("Moush {} starting", env!("CARGO_PKG_VERSION"));
     let launched_minimized = std::env::args().any(|a| a == "--autostart" || a == "--minimized");
+    let context = tauri::generate_context!();
+    #[cfg(debug_assertions)]
+    exit_if_already_running(&context.config().identifier);
 
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| show_main_window(app)))
@@ -114,7 +117,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!());
+        .build(context);
 
     let app = match result {
         Ok(a) => a,
@@ -134,6 +137,29 @@ fn main() {
         RunEvent::Exit => shutdown(handle),
         _ => {}
     });
+}
+
+/// Dev builds only. When Moush is already running (usually the installed copy in the tray),
+/// the single-instance plugin hands over to it and exits without a word, so `tauri dev`
+/// seems to quit and the old build's window shows instead. Say why and stop. Running both
+/// is not an option: two input hooks, one port and one settings folder.
+#[cfg(debug_assertions)]
+fn exit_if_already_running(identifier: &str) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
+
+    // Same name the plugin creates (tauri-plugin-single-instance, Windows, no `semver` feature).
+    let name: Vec<u16> = format!("{identifier}-sim").encode_utf16().chain(Some(0)).collect();
+    let handle = unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, name.as_ptr()) };
+    if handle.is_null() {
+        return;
+    }
+    unsafe { CloseHandle(handle) };
+    log::error!(
+        "Moush is already running (check the tray, or the installed copy). \
+         Quit it from the tray icon (Quit Moush), then run `npm run tauri dev` again."
+    );
+    std::process::exit(1);
 }
 
 /// Shows the main window, creating it if it was closed to the tray. Safe from any thread.

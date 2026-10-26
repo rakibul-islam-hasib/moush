@@ -1,6 +1,27 @@
+# Build output
 target/
 node_modules/
 dist/
 src-tauri/gen/
 *.log
+
+# Local tooling and editor state
 .commandcode/
+.claude/
+.idea/
+.vscode/
+*.swp
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Launch film working directory (large renders, caches, narration key)
+brag-output/
+.hyperframes/

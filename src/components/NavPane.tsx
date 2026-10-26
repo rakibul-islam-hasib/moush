@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { backend, type AppSnapshot } from "../api";
 import { readFlag, useMediaQuery, writeFlag } from "../hooks/useMediaQuery";
 import { cx } from "../lib/cx";
+import { dev } from "../lib/dev";
 import type { NavSection, PageId } from "../lib/navigation";
 import { shortStatus } from "../lib/status";
 import { StatusDot } from "./Badge";
@@ -182,7 +183,7 @@ export const NavPane = memo(function NavPane({ section, snapshot, onNavigate, pa
         </div>
 
         <div className="nav-footer">
-          {mock && expanded && (
+          {mock && expanded && !dev?.clean && (
             <details className="nav-mock">
               <summary>Preview data</summary>
               <div className="nav-mock-actions" role="group" aria-label="Preview controls">

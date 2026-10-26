@@ -17,7 +17,6 @@
     radial-gradient(120% 140% at 100% 0%, var(--hero-glow), transparent 60%),
     var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-2);
 }
 
 .hero-text {
@@ -83,6 +82,7 @@
 
 .hero-title {
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: 24px;
   font-weight: var(--fw-strong);
   line-height: 32px;
@@ -134,8 +134,7 @@
   height: 64px;
   border: 1px solid var(--card-stroke);
   border-radius: 20px;
-  background: var(--card);
-  box-shadow: var(--elev-2);
+  background: var(--control);
   color: var(--text);
 }
 
@@ -156,13 +155,11 @@
 .conn-error .conn-remote {
   border-style: dashed;
   color: var(--text-tertiary);
-  box-shadow: none;
 }
 
 .conn-waiting .conn-remote {
   border: 1.5px dashed var(--conn);
   background: transparent;
-  box-shadow: none;
   color: var(--text-tertiary);
 }
 
@@ -341,7 +338,6 @@ html[data-motion="reduce"] .conn-node::after {
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
 }
 
 .active-card-icon {
@@ -399,7 +395,6 @@ html[data-motion="reduce"] .conn-node::after {
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
   color: var(--text);
   text-align: left;
   cursor: default;
@@ -412,6 +407,7 @@ html[data-motion="reduce"] .conn-node::after {
 
 .mini-stat-value {
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: var(--fs-title);
   font-weight: var(--fw-strong);
   line-height: var(--lh-title);
@@ -454,7 +450,6 @@ html[data-motion="reduce"] .conn-node::after {
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
   color: var(--text);
   text-align: left;
   cursor: default;
@@ -470,11 +465,6 @@ html[data-motion="reduce"] .conn-node::after {
 
 .quick-tile:active {
   transform: scale(0.985);
-}
-
-.quick-tile.is-on {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--card-stroke));
-  background: color-mix(in srgb, var(--accent) 7%, var(--card));
 }
 
 .quick-tile-icon {
@@ -1014,7 +1004,7 @@ html[data-motion="reduce"] .conn-node::after {
 
 .target.is-selected {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background-color: var(--accent-subtle);
 }
 
 .target input {
@@ -1298,6 +1288,7 @@ html[data-motion="reduce"] .conn-node::after {
   padding: 6px;
   border: 1px solid var(--card-stroke);
   border-radius: var(--radius-md);
+  background: var(--card-inset);
   cursor: default;
   transition:
     border-color var(--dur-fast) linear,
@@ -1310,7 +1301,7 @@ html[data-motion="reduce"] .conn-node::after {
 
 .theme-option.is-selected {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background-color: var(--accent-subtle);
 }
 
 .theme-option:has(input:focus-visible) {
@@ -1350,7 +1341,6 @@ html[data-motion="reduce"] .conn-node::after {
   height: 18px;
   border-radius: 3px;
   background: #ffffff;
-  box-shadow: 0 1px 2px rgba(20, 24, 48, 0.1);
 }
 
 .tp-card-1 {
@@ -1377,7 +1367,6 @@ html[data-motion="reduce"] .conn-node::after {
 
 .theme-preview-dark .tp-card {
   background: #20212a;
-  box-shadow: none;
 }
 
 .theme-preview-dark .tp-accent {

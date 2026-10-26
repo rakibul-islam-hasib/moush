@@ -4,6 +4,10 @@ description = "Headless Moush host/client, benchmark and self-test"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "moush-cli"

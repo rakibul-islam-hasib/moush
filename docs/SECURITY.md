@@ -6,6 +6,9 @@ against, what protects each asset, what is deliberately out of scope, and the ru
 feature module must follow. It complements the *Security* section of
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+To report a vulnerability, follow the repository's [security policy](../SECURITY.md) and use
+GitHub's private reporting form. Do not open a public issue for a security problem.
+
 ## Assets
 
 | Asset | Why it matters |

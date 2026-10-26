@@ -319,7 +319,7 @@
   border: 5px solid var(--control-solid);
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 1px var(--control-stroke), var(--elev-1);
+  box-shadow: 0 0 0 1px var(--track);
   appearance: none;
   -webkit-appearance: none;
   transition: border-width var(--dur-fast) var(--ease);
@@ -355,7 +355,7 @@
   border: 5px solid var(--control-solid);
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 1px var(--control-stroke);
+  box-shadow: 0 0 0 1px var(--track);
 }
 
 /* ---------------------------------------------------------------- Select (ComboBox) */
@@ -417,9 +417,6 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: 12px 8px 12px 16px;
-  border: 1px solid var(--card-stroke);
-  border-left-width: 3px;
-  border-left-color: var(--accent);
   border-radius: var(--radius-md);
   background: var(--info-bg);
 }
@@ -431,7 +428,6 @@
 }
 
 .infobar-success {
-  border-left-color: var(--success);
   background: var(--success-bg);
 }
 
@@ -440,7 +436,6 @@
 }
 
 .infobar-warning {
-  border-left-color: var(--caution);
   background: var(--caution-bg);
 }
 
@@ -449,7 +444,6 @@
 }
 
 .infobar-error {
-  border-left-color: var(--critical);
   background: var(--critical-bg);
 }
 
@@ -691,7 +685,6 @@ html[data-motion="reduce"] .progress-bar.is-active .progress-bar-fill::after {
   border-radius: var(--radius-lg);
   background: var(--dialog-bg);
   color: var(--text);
-  box-shadow: var(--shadow-dialog);
   overflow: auto;
 }
 
@@ -751,6 +744,7 @@ html[data-motion="reduce"] .progress-bar.is-active .progress-bar-fill::after {
 
 .dialog-title {
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: var(--fs-subtitle);
   font-weight: var(--fw-strong);
   line-height: var(--lh-subtitle);
@@ -809,14 +803,12 @@ html[data-theme="dark"] .dialog-footer > .btn-danger {
 .toast {
   border-radius: var(--radius-md);
   background: var(--flyout-bg);
-  box-shadow: var(--shadow-flyout);
   pointer-events: auto;
   animation: toast-in var(--dur-slow) var(--ease);
 }
 
 .toast .infobar {
-  border-color: var(--surface-stroke);
-  border-left-width: 3px;
+  border: 1px solid var(--surface-stroke);
 }
 
 @keyframes toast-in {
@@ -833,7 +825,6 @@ html[data-theme="dark"] .dialog-footer > .btn-danger {
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
   scroll-margin-top: var(--space-4);
 }
 
@@ -934,12 +925,10 @@ html[data-theme="dark"] .dialog-footer > .btn-danger {
 .expander-subheading {
   margin: 0;
   padding: 16px 16px 4px 52px;
-  color: var(--text-secondary);
+  color: var(--text);
   font-size: var(--fs-caption);
   font-weight: var(--fw-strong);
   line-height: var(--lh-caption);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .expander-subheading + .expander-row {

@@ -23,7 +23,6 @@
 
 .onboarding-logo {
   margin-bottom: 8px;
-  filter: drop-shadow(0 6px 16px var(--hero-glow));
 }
 
 .role-picker {
@@ -63,7 +62,7 @@
 
 .role-card.is-selected {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background-color: var(--accent-subtle);
 }
 
 .role-card:has(.role-radio:focus-visible) {
@@ -93,6 +92,7 @@
 
 .role-card-title {
   font-size: var(--fs-subtitle);
+  letter-spacing: var(--tracking-title);
   font-weight: 600;
   line-height: 28px;
 }
@@ -168,6 +168,7 @@
 
 .pairing-code {
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: 40px;
   font-weight: 600;
   line-height: 52px;
@@ -222,6 +223,7 @@
 .stat-value {
   overflow: hidden;
   font-size: var(--fs-subtitle);
+  letter-spacing: var(--tracking-title);
   font-weight: 600;
   line-height: 28px;
   text-overflow: ellipsis;

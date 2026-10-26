@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install and usage guide
+    url: https://github.com/rakibul-islam-hasib/moush/blob/main/docs/GUIDE.md
+    about: Setup, pairing, screen layout, clipboard, file transfer and troubleshooting.
+  - name: Troubleshooting
+    url: https://github.com/rakibul-islam-hasib/moush/blob/main/docs/TROUBLESHOOTING.md
+    about: Solutions to the most common connection, discovery and firewall problems.
+  - name: Security policy
+    url: https://github.com/rakibul-islam-hasib/moush/security/policy
+    about: Report vulnerabilities privately. Do not open a public issue.

@@ -1,15 +1,21 @@
-# Moush docs site
+# Moush website
 
-A self-contained static site (no build step) for the Moush install and usage guide.
+A self-contained static landing page (no build step): what Moush does, an interactive demo,
+features, security, performance, setup and FAQ.
 
 ```
 website/
-├── index.html                 the whole guide (features, install, usage, troubleshooting, build)
-├── styles.css                 light/dark theme matching the app's design tokens
+├── index.html                 the page (icons are an inline sprite of the app's icon set)
+├── styles.css                 dark/light theme in the app's design language (Geist, tonal, no shadows)
+├── app.js                     theme toggle, copy buttons and the interactive desk demo
 └── assets/
-    ├── icon.png               app icon (favicon + brand)
-    └── screenshots/*.png      captured from the UI preview mock
+    ├── icon.svg, icon.png     app icon (favicon + brand)
+    ├── screenshots/*.webp     2x captures from the UI preview mock, one per theme
+    └── video/                 launch film (MP4) and poster (JPG), credited in THIRD_PARTY_NOTICES.md
 ```
+
+Every number and claim on the page comes from `README.md` and `docs/` (PERFORMANCE.md,
+SECURITY.md, GUIDE.md); update the page when those change.
 
 ## Preview locally
 
@@ -30,16 +36,15 @@ be regenerated deterministically:
 npm run dev
 # then, in another shell (see src/lib/dev.ts and src/api/mock.ts):
 #   ?page=home|devices|layout|features|transfers|settings|diagnostics
-#   ?mockRole=host|client|none   ?theme=light|dark   &expand=all   &motion=reduce
-agent-browser open "http://localhost:1420/?page=home&theme=light&motion=reduce"
-agent-browser set viewport 1280 800
-agent-browser wait 2200
-agent-browser eval "document.querySelector('.nav-mock')?.remove()"
-agent-browser screenshot "website/assets/screenshots/home.png"
+#   ?mockRole=host|client|none   ?theme=light|dark   &expand=all   &motion=reduce   &clean=1
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless=new --hide-scrollbars `
+  --force-device-scale-factor=2 --window-size=1280,800 --virtual-time-budget=5000 `
+  --screenshot=home-dark.png "http://localhost:1420/?page=home&theme=dark&motion=reduce&clean=1"
 ```
 
-`&motion=reduce` keeps transition animations out of the captures and the `eval` hides the
-dev-only *Preview data* panel.
+Capture each screen in `dark` and `light`, then convert to WebP (quality ~86). `&motion=reduce`
+keeps transitions out of the captures and `&clean=1` hides the dev-only *Preview data* panel.
+The `crop-*` images are cut from the layout and transfers captures.
 
 ## Publish (GitHub Pages)
 

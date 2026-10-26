@@ -177,7 +177,6 @@
   border-right: 1px solid var(--surface-stroke);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
   background: var(--flyout-bg);
-  box-shadow: var(--elev-3);
   animation: nav-overlay-in var(--dur-slow) var(--ease);
 }
 
@@ -443,6 +442,7 @@
   align-items: center;
   gap: var(--space-2);
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: var(--fs-title);
   font-weight: var(--fw-strong);
   line-height: var(--lh-title);
@@ -547,7 +547,6 @@
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
   color: var(--text);
   text-align: left;
 }
@@ -645,7 +644,6 @@
   border-radius: var(--radius-md);
   background: var(--card);
   background-clip: padding-box;
-  box-shadow: var(--elev-1);
   list-style: none;
 }
 
@@ -720,7 +718,6 @@
   border: 2px dashed var(--accent);
   border-radius: var(--radius-lg);
   background: var(--card);
-  box-shadow: var(--elev-3);
   text-align: center;
   animation: drop-frame-in var(--dur-slow) var(--ease-spring);
 }
@@ -761,6 +758,7 @@
 
 .drop-overlay-title {
   font-family: var(--font-display);
+  letter-spacing: var(--tracking-display);
   font-size: var(--fs-subtitle);
   font-weight: var(--fw-strong);
   line-height: var(--lh-subtitle);

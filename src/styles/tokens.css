@@ -1,7 +1,10 @@
 /*
  * Moush design tokens.
  *
- * Layers:   window (--bg) > content layer (--layer) > cards (--card) > controls (--control)
+ * Layers:   window (--bg) > content layer (--layer) > cards (--card) > controls (--control).
+ * Depth:    tonal only. Each layer is one clear step from the one beneath; there are no shadows.
+ *           Borders mark state (focus, selection, inputs) and the hairline edge of floating
+ *           surfaces (dialogs, toasts, the overlay pane), nothing else.
  * Themes:   light is the default; html[data-theme="dark"] for dark; forced-colors for high contrast.
  * Surfaces: opaque by default; html.mica makes the window and layers translucent over the native
  *           Mica backdrop (only when the backdrop is really applied and transparency is on).
@@ -11,10 +14,12 @@
 :root {
   color-scheme: light;
 
-  /* ---- Typography ramp (Segoe UI Variable with system fallbacks) */
-  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  /* ---- Typography ramp (Geist, bundled via @fontsource-variable; Segoe UI as fallback) */
+  --font: "Geist Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Geist Variable", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Cascadia Mono", Consolas, monospace;
+  --tracking-display: -0.025em;
+  --tracking-title: -0.012em;
   --fs-caption: 12px;
   --lh-caption: 16px;
   --fs-body: 14px;
@@ -28,6 +33,7 @@
   --fs-display: 40px;
   --lh-display: 52px;
   --fw-regular: 400;
+  --fw-medium: 500;
   --fw-strong: 600;
 
   /* ---- Spacing scale (4 px grid) */
@@ -69,15 +75,15 @@
   --brand-gradient: linear-gradient(135deg, var(--brand-1), var(--brand-2));
 
   /* ---- Surfaces (opaque) */
-  --bg: #eef0f5;
-  --layer: #f7f8fb;
-  --layer-stroke: rgba(20, 24, 48, 0.07);
+  --bg: #e9ebf0;
+  --layer: #f3f4f7;
+  --layer-stroke: transparent;
   --card: #ffffff;
-  --card-hover: #fafbfd;
-  --card-pressed: #f4f5f9;
-  --card-stroke: rgba(20, 24, 48, 0.085);
-  --card-inset: rgba(20, 24, 48, 0.035);
-  --divider: rgba(20, 24, 48, 0.08);
+  --card-hover: #fafafc;
+  --card-pressed: #f5f6f9;
+  --card-stroke: transparent;
+  --card-inset: rgba(20, 24, 48, 0.04);
+  --divider: rgba(20, 24, 48, 0.06);
   --dialog-bg: #ffffff;
   --dialog-footer: #f3f4f8;
   --flyout-bg: #ffffff;
@@ -85,13 +91,13 @@
   --smoke: rgba(12, 14, 28, 0.32);
 
   /* ---- Controls */
-  --control: rgba(255, 255, 255, 0.9);
-  --control-hover: #f8f9fc;
-  --control-pressed: #f2f3f7;
-  --control-disabled: rgba(245, 246, 250, 0.6);
+  --control: rgba(20, 24, 48, 0.055);
+  --control-hover: rgba(20, 24, 48, 0.085);
+  --control-pressed: rgba(20, 24, 48, 0.045);
+  --control-disabled: rgba(20, 24, 48, 0.03);
   --control-input-active: #ffffff;
-  --control-stroke: rgba(20, 24, 48, 0.1);
-  --control-stroke-bottom: rgba(20, 24, 48, 0.2);
+  --control-stroke: transparent;
+  --control-stroke-bottom: transparent;
   --control-strong-stroke: rgba(20, 24, 48, 0.48);
   --control-strong-fill: rgba(20, 24, 48, 0.46);
   --control-alt: rgba(20, 24, 48, 0.03);
@@ -115,8 +121,8 @@
   --accent-text: #4136c4;
   --accent-subtle: rgba(79, 67, 221, 0.09);
   --accent-subtle-strong: rgba(79, 67, 221, 0.16);
-  --accent-stroke: rgba(255, 255, 255, 0.1);
-  --accent-stroke-bottom: rgba(0, 0, 0, 0.35);
+  --accent-stroke: transparent;
+  --accent-stroke-bottom: transparent;
   --on-accent: #ffffff;
   --on-accent-secondary: rgba(255, 255, 255, 0.78);
   --on-accent-disabled: #ffffff;
@@ -132,14 +138,6 @@
   --info-bg: #eceafd;
   --attention-bg: #f1f2f7;
   --neutral: #8a8ea2;
-
-  /* ---- Elevation */
-  --elev-1: 0 1px 2px rgba(20, 24, 48, 0.05);
-  --elev-2: 0 4px 12px rgba(20, 24, 48, 0.08), 0 1px 3px rgba(20, 24, 48, 0.06);
-  --elev-3: 0 12px 32px rgba(20, 24, 48, 0.16), 0 2px 8px rgba(20, 24, 48, 0.08);
-  --elev-4: 0 28px 64px rgba(20, 24, 48, 0.24), 0 4px 16px rgba(20, 24, 48, 0.12);
-  --shadow-dialog: var(--elev-4);
-  --shadow-flyout: var(--elev-3);
 
   /* ---- Focus */
   --focus-outer: #161826;
@@ -160,18 +158,18 @@ html[data-theme="dark"] {
   --brand-1: #8b80ff;
   --brand-2: #45d3e3;
 
-  --bg: #131419;
-  --layer: #191a21;
-  --layer-stroke: rgba(255, 255, 255, 0.06);
-  --card: #20212a;
-  --card-hover: #252631;
-  --card-pressed: #1d1e26;
-  --card-stroke: rgba(255, 255, 255, 0.075);
-  --card-inset: rgba(0, 0, 0, 0.18);
-  --divider: rgba(255, 255, 255, 0.075);
-  --dialog-bg: #23242e;
-  --dialog-footer: #1b1c24;
-  --flyout-bg: #262732;
+  --bg: #0d0e12;
+  --layer: #14151a;
+  --layer-stroke: transparent;
+  --card: #1c1d24;
+  --card-hover: #22232b;
+  --card-pressed: #191a20;
+  --card-stroke: transparent;
+  --card-inset: rgba(0, 0, 0, 0.22);
+  --divider: rgba(255, 255, 255, 0.06);
+  --dialog-bg: #1f2028;
+  --dialog-footer: #18191f;
+  --flyout-bg: #23242c;
   --surface-stroke: rgba(255, 255, 255, 0.12);
   --smoke: rgba(0, 0, 0, 0.5);
 
@@ -180,8 +178,8 @@ html[data-theme="dark"] {
   --control-pressed: rgba(255, 255, 255, 0.04);
   --control-disabled: rgba(255, 255, 255, 0.04);
   --control-input-active: #15161c;
-  --control-stroke: rgba(255, 255, 255, 0.08);
-  --control-stroke-bottom: rgba(255, 255, 255, 0.05);
+  --control-stroke: transparent;
+  --control-stroke-bottom: transparent;
   --control-strong-stroke: rgba(255, 255, 255, 0.55);
   --control-strong-fill: rgba(255, 255, 255, 0.5);
   --control-alt: rgba(0, 0, 0, 0.14);
@@ -203,8 +201,8 @@ html[data-theme="dark"] {
   --accent-text: #bcb6ff;
   --accent-subtle: rgba(163, 156, 255, 0.12);
   --accent-subtle-strong: rgba(163, 156, 255, 0.2);
-  --accent-stroke: rgba(255, 255, 255, 0.1);
-  --accent-stroke-bottom: rgba(0, 0, 0, 0.2);
+  --accent-stroke: transparent;
+  --accent-stroke-bottom: transparent;
   --on-accent: #12102e;
   --on-accent-secondary: rgba(18, 16, 46, 0.7);
   --on-accent-disabled: rgba(255, 255, 255, 0.5);
@@ -218,11 +216,6 @@ html[data-theme="dark"] {
   --info-bg: rgba(163, 156, 255, 0.12);
   --attention-bg: rgba(255, 255, 255, 0.04);
   --neutral: #8b8ea0;
-
-  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --elev-2: 0 4px 12px rgba(0, 0, 0, 0.32), 0 1px 3px rgba(0, 0, 0, 0.24);
-  --elev-3: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --elev-4: 0 28px 64px rgba(0, 0, 0, 0.55), 0 4px 16px rgba(0, 0, 0, 0.35);
 
   --focus-outer: #ffffff;
   --focus-inner: #000000;

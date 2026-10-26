@@ -1,387 +1,262 @@
-/**
- * Moush Website — Interactive Experience & Workstation Simulator
- * Seamless Multi-Computer Control Simulation, Live Telemetry & Tab Handlers
+// Moush website: theme toggle, header state, copy buttons and the interactive desk demo.
+
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+initTheme();
+initHeader();
+initCopyButtons();
+initDesk();
+
+/* ---------------------------------------------------------------- Theme */
+
+function initTheme() {
+  const button = document.getElementById("theme-toggle");
+  const root = document.documentElement;
+  const label = () => {
+    const next = root.dataset.theme === "dark" ? "light" : "dark";
+    button.setAttribute("aria-label", `Switch to ${next} theme`);
+  };
+  label();
+  button.addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem("moush-theme", root.dataset.theme);
+    } catch {
+      // Storage can be unavailable (private windows); the toggle still works for this visit.
+    }
+    label();
+  });
+}
+
+/* ---------------------------------------------------------------- Header */
+
+function initHeader() {
+  const header = document.getElementById("site-header");
+  const update = () => header.classList.toggle("is-scrolled", window.scrollY > 8);
+  update();
+  window.addEventListener("scroll", update, { passive: true });
+}
+
+/* ---------------------------------------------------------------- Copy */
+
+function initCopyButtons() {
+  for (const button of document.querySelectorAll("[data-copy]")) {
+    const label = button.querySelector("span");
+    button.addEventListener("click", async () => {
+      const text = document.querySelector(button.dataset.copy)?.textContent ?? "";
+      try {
+        await navigator.clipboard.writeText(text);
+        label.textContent = "Copied";
+        button.classList.add("is-done");
+      } catch {
+        label.textContent = "Select and copy";
+      }
+      setTimeout(() => {
+        label.textContent = "Copy";
+        button.classList.remove("is-done");
+      }, 1600);
+    });
+  }
+}
+
+/* ---------------------------------------------------------------- Desk demo
+ *
+ * Two displays share one edge: the laptop's right side and the monitor's left side,
+ * over the height where they overlap. The cursor crosses only through that segment,
+ * like Moush does; elsewhere it stops at the screen edge. Typing goes to whichever
+ * computer has the cursor.
  */
 
-document.addEventListener("DOMContentLoaded", () => {
-  // 1. Theme Management (Dark / Light / System)
-  initThemeToggle();
+function initDesk() {
+  const desk = document.getElementById("desk");
+  if (!desk) return;
 
-  // 2. Interactive Workstation Simulator
-  initWorkstationSimulator();
+  const pcs = {
+    laptop: desk.querySelector('[data-pc="laptop"]'),
+    desktop: desk.querySelector('[data-pc="desktop"]'),
+  };
+  const names = { laptop: "Laptop", desktop: "Desktop" };
+  const cursor = document.getElementById("fake-cursor");
+  const status = document.getElementById("desk-active");
 
-  // 3. Screenshot Gallery Tabs
-  initGalleryTabs();
+  let rects = null; // display rectangles in desk coordinates
+  let active = "desktop";
+  let rel = { u: 0.5, v: 0.5 }; // cursor position as a fraction of the active display
+  let interacted = false;
+  let autoplay = null;
+  const fresh = new Set(["laptop", "desktop"]); // screens still showing their sample text
 
-  // 4. Code Block Tab Switcher & 1-Click Copy
-  initCodeTabs();
-
-  // 5. Header Scroll Effect
-  initHeaderScroll();
-});
-
-/* ==========================================================================
-   1. Theme Management
-   ========================================================================== */
-function initThemeToggle() {
-  const toggleBtn = document.getElementById("theme-toggle");
-  if (!toggleBtn) return;
-
-  const savedTheme = localStorage.getItem("moush-theme") || "dark";
-  document.documentElement.setAttribute("data-theme", savedTheme);
-
-  toggleBtn.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
-    const nextTheme = currentTheme === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", nextTheme);
-    localStorage.setItem("moush-theme", nextTheme);
-    updateThemeIcon(nextTheme);
-  });
-
-  updateThemeIcon(savedTheme);
-}
-
-function updateThemeIcon(theme) {
-  const icon = document.getElementById("theme-toggle-icon");
-  if (!icon) return;
-  if (theme === "light") {
-    // Show Moon for switching to dark
-    icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-  } else {
-    // Show Sun for switching to light
-    icon.innerHTML = `<circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/>`;
+  function measure() {
+    const base = desk.getBoundingClientRect();
+    const box = (pc) => {
+      const r = pcs[pc].querySelector(".display").getBoundingClientRect();
+      return { left: r.left - base.left, top: r.top - base.top, right: r.right - base.left, bottom: r.bottom - base.top };
+    };
+    const L = box("laptop");
+    const M = box("desktop");
+    const top = Math.max(L.top, M.top);
+    const bottom = Math.min(L.bottom, M.bottom);
+    rects = { laptop: L, desktop: M, top, bottom, mid: (L.right + M.left) / 2 };
+    desk.style.setProperty("--edge-top", `${top}px`);
+    desk.style.setProperty("--edge-h", `${Math.max(0, bottom - top)}px`);
+    desk.style.setProperty("--edge-laptop-x", `${L.right - 1.5}px`);
+    desk.style.setProperty("--edge-monitor-x", `${M.left - 1.5}px`);
+    render();
   }
-}
 
-/* ==========================================================================
-   2. Interactive Workstation Simulator
-   ========================================================================== */
-function initWorkstationSimulator() {
-  const stage = document.getElementById("sim-stage");
-  const cursor = document.getElementById("sim-cursor");
-  const monitorDesktop = document.getElementById("monitor-desktop");
-  const monitorLaptop = document.getElementById("monitor-laptop");
-  const statusPill = document.getElementById("sim-status-text");
-  const energyConduit = document.getElementById("sim-energy-conduit");
-  const toastDesktop = document.getElementById("sim-toast-desktop");
-  const toastLaptop = document.getElementById("sim-toast-laptop");
+  function render() {
+    const r = rects[active];
+    const x = r.left + rel.u * (r.right - r.left);
+    const y = r.top + rel.v * (r.bottom - r.top);
+    // The arrow's tip sits at (5.5, 3.2) on the icon's 20 px grid.
+    const s = cursor.getBoundingClientRect().width;
+    cursor.style.transform = `translate(${x - (s * 5.5) / 20}px, ${y - (s * 3.2) / 20}px)`;
+  }
 
-  const btnEdge = document.getElementById("sim-btn-edge");
-  const btnClipboard = document.getElementById("sim-btn-clipboard");
-  const btnFile = document.getElementById("sim-btn-file");
-  const btnLayout = document.getElementById("sim-btn-layout");
+  function setActive(pc) {
+    if (pc === active) return;
+    active = pc;
+    for (const [name, el] of Object.entries(pcs)) el.classList.toggle("is-active", name === pc);
+    status.textContent = names[pc];
+    desk.classList.remove("crossed");
+    void desk.offsetWidth; // restart the edge flash
+    desk.classList.add("crossed");
+  }
 
-  if (!stage || !cursor || !monitorDesktop || !monitorLaptop) return;
+  // Moves the cursor towards a point in desk coordinates.
+  function point(px, py) {
+    const inShared = py >= rects.top && py <= rects.bottom;
+    const side = px < rects.mid ? "laptop" : "desktop";
+    if (side !== active && inShared) setActive(side);
+    const r = rects[active];
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+    rel = {
+      u: (clamp(px, r.left, r.right - 1) - r.left) / (r.right - r.left),
+      v: (clamp(py, r.top, r.bottom - 1) - r.top) / (r.bottom - r.top),
+    };
+    render();
+  }
 
-  let isManualInteraction = false;
-  let autoAnimId = null;
-  let layoutFlipped = false;
+  function jumpTo(pc) {
+    setActive(pc);
+    rel = { u: 0.5, v: 0.55 };
+    render();
+  }
 
-  // Track cursor position inside stage
-  stage.addEventListener("mousemove", (e) => {
-    isManualInteraction = true;
-    cancelAnimationFrame(autoAnimId);
-
-    const rect = stage.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    cursor.style.transform = `translate(${x - 4}px, ${y - 4}px)`;
-
-    // Detect which screen contains the cursor
-    updateScreenAffordance(x, rect.width);
-  });
-
-  stage.addEventListener("mouseleave", () => {
-    isManualInteraction = false;
-    startIdleAnimation();
-  });
-
-  function updateScreenAffordance(x, totalWidth) {
-    const threshold = totalWidth * 0.55;
-    const isOverLaptop = layoutFlipped ? x < totalWidth * 0.45 : x > threshold;
-
-    if (isOverLaptop) {
-      monitorLaptop.classList.add("active-monitor");
-      monitorDesktop.classList.remove("active-monitor");
-      energyConduit.classList.add("active");
-      if (statusPill) {
-        statusPill.innerHTML = `Controlled: <strong>Laptop Client</strong> · Focus active · ~42 µs latency`;
-      }
-    } else {
-      monitorDesktop.classList.add("active-monitor");
-      monitorLaptop.classList.remove("active-monitor");
-      energyConduit.classList.remove("active");
-      if (statusPill) {
-        statusPill.innerHTML = `Controlled: <strong>Desktop Host</strong> · Physical Input Hub`;
-      }
+  function type(pc, text) {
+    const target = pcs[pc].querySelector("[data-typed]");
+    if (fresh.has(pc)) {
+      fresh.delete(pc);
+      target.textContent = "";
     }
+    target.textContent = (target.textContent + text).slice(-90);
   }
 
-  // Simulator Interactive Action Buttons
-  if (btnEdge) {
-    btnEdge.addEventListener("click", () => {
-      cancelAnimationFrame(autoAnimId);
-      animateCrossScreenTransition();
-    });
+  function takeOver() {
+    interacted = true;
+    desk.classList.add("is-live");
+    if (autoplay) autoplay.cancel();
   }
 
-  if (btnClipboard) {
-    btnClipboard.addEventListener("click", () => {
-      cancelAnimationFrame(autoAnimId);
-      simulateClipboardSync();
-    });
-  }
-
-  if (btnFile) {
-    btnFile.addEventListener("click", () => {
-      cancelAnimationFrame(autoAnimId);
-      simulateFileTransfer();
-    });
-  }
-
-  if (btnLayout) {
-    btnLayout.addEventListener("click", () => {
-      layoutFlipped = !layoutFlipped;
-      if (layoutFlipped) {
-        stage.style.flexDirection = "row-reverse";
-        btnLayout.classList.add("active");
-      } else {
-        stage.style.flexDirection = "row";
-        btnLayout.classList.remove("active");
-      }
-      showToast(toastDesktop, "Layout rearranged · Saved to layout.json");
-    });
-  }
-
-  // Animation: Cross-Screen Transition
-  function animateCrossScreenTransition() {
-    const rect = stage.getBoundingClientRect();
-    const startX = rect.width * 0.25;
-    const targetX = rect.width * 0.78;
-    const y = rect.height * 0.48;
-
-    let progress = 0;
-    function step() {
-      progress += 0.025;
-      const currentX = startX + (targetX - startX) * progress;
-      cursor.style.transform = `translate(${currentX}px, ${y}px)`;
-      updateScreenAffordance(currentX, rect.width);
-
-      if (progress < 1) {
-        requestAnimationFrame(step);
-      } else {
-        setTimeout(() => {
-          showToast(toastLaptop, "Cursor entered laptop screen");
-          setTimeout(startIdleAnimation, 2000);
-        }, 300);
-      }
-    }
-    requestAnimationFrame(step);
-  }
-
-  // Animation: Clipboard Sync
-  function simulateClipboardSync() {
-    showToast(toastDesktop, "📋 Copied on Desktop: https://github.com/rakibul-islam-hasib/moush");
-    energyConduit.classList.add("active");
-
-    setTimeout(() => {
-      showToast(toastLaptop, "📋 Synced to Laptop: Ready to paste (Noise-XX)");
-      energyConduit.classList.remove("active");
-      setTimeout(startIdleAnimation, 2500);
-    }, 1000);
-  }
-
-  // Animation: File Transfer
-  function simulateFileTransfer() {
-    showToast(toastDesktop, "📦 Sending file: cargo-release-v0.1.0.zip (14.2 MB)");
-    energyConduit.classList.add("active");
-
-    setTimeout(() => {
-      showToast(toastLaptop, "✅ Received: cargo-release-v0.1.0.zip (Verified SHA256)");
-      energyConduit.classList.remove("active");
-      setTimeout(startIdleAnimation, 3000);
-    }, 1200);
-  }
-
-  function showToast(elem, text) {
-    if (!elem) return;
-    elem.textContent = text;
-    elem.classList.add("show");
-    setTimeout(() => {
-      elem.classList.remove("show");
-    }, 2800);
-  }
-
-  // Idle organic roaming animation
-  let angle = 0;
-  function startIdleAnimation() {
-    if (isManualInteraction) return;
-
-    function idleLoop() {
-      if (isManualInteraction) return;
-      angle += 0.015;
-      const rect = stage.getBoundingClientRect();
-      const midX = rect.width * 0.5;
-      const midY = rect.height * 0.48;
-      const x = midX + Math.sin(angle) * (rect.width * 0.32);
-      const y = midY + Math.cos(angle * 1.5) * (rect.height * 0.22);
-
-      cursor.style.transform = `translate(${x}px, ${y}px)`;
-      updateScreenAffordance(x, rect.width);
-      autoAnimId = requestAnimationFrame(idleLoop);
-    }
-    cancelAnimationFrame(autoAnimId);
-    autoAnimId = requestAnimationFrame(idleLoop);
-  }
-
-  // Start initial idle loop
-  startIdleAnimation();
-}
-
-/* ==========================================================================
-   3. Screenshot Gallery Tabs
-   ========================================================================== */
-function initGalleryTabs() {
-  const tabs = document.querySelectorAll(".gallery-tab-btn");
-  const img = document.getElementById("gallery-active-img");
-  const title = document.getElementById("gallery-title");
-  const desc = document.getElementById("gallery-desc");
-
-  if (!tabs.length || !img) return;
-
-  const galleryData = {
-    home: {
-      src: "assets/screenshots/home-dark.png",
-      title: "Home Dashboard",
-      desc: "Instant connection status, sharing toggle, and real-time activity feed."
-    },
-    layout: {
-      src: "assets/screenshots/layout.png",
-      title: "Screen Layout Arranger",
-      desc: "Drag-and-drop monitor positioning matching your desk's physical setup."
-    },
-    transfers: {
-      src: "assets/screenshots/transfers.png",
-      title: "Encrypted File Transfers",
-      desc: "Resumable, high-throughput drag-and-drop file streaming over direct TCP."
-    },
-    features: {
-      src: "assets/screenshots/features.png",
-      title: "Feature Permissions",
-      desc: "Granular controls for clipboard, keyboard shortcuts, and device access."
-    },
-    devices: {
-      src: "assets/screenshots/devices.png",
-      title: "Paired Devices",
-      desc: "6-digit mutual authentication, trusted peers, and remote device management."
-    },
-    diagnostics: {
-      src: "assets/screenshots/diagnostics.png",
-      title: "Diagnostics & Firewall",
-      desc: "Real-time latency telemetry, firewall helper, and live network logs."
-    }
+  const local = (e) => {
+    const base = desk.getBoundingClientRect();
+    return [e.clientX - base.left, e.clientY - base.top];
   };
 
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const key = tab.getAttribute("data-gallery");
-      const data = galleryData[key];
-      if (!data) return;
-
-      tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-
-      img.style.opacity = "0.3";
-      img.style.transform = "scale(0.99)";
-
-      setTimeout(() => {
-        img.src = data.src;
-        if (title) title.textContent = data.title;
-        if (desc) desc.textContent = data.desc;
-        img.style.opacity = "1";
-        img.style.transform = "scale(1)";
-      }, 150);
-    });
-  });
-}
-
-/* ==========================================================================
-   4. Code Block Tab Switcher & 1-Click Copy
-   ========================================================================== */
-function initCodeTabs() {
-  const tabBtns = document.querySelectorAll(".code-tab-btn");
-  const codeContent = document.getElementById("code-snippet-content");
-  const copyBtn = document.getElementById("code-copy-btn");
-
-  const snippets = {
-    winget: "winget install Moush",
-    installer: "# Download the latest standalone installer directly from GitHub Releases\nInvoke-WebRequest -Uri 'https://github.com/rakibul-islam-hasib/moush/releases/latest/download/Moush_x64-setup.exe' -OutFile 'Moush-setup.exe'\nStart-Process 'Moush-setup.exe'",
-    cargo: "# Build & run from source (Rust 1.85+ and Node.js 20+ required)\ngit clone https://github.com/rakibul-islam-hasib/moush.git\ncd moush\nnpm install\nnpx tauri dev",
-    cli: "# Run the headless CLI tool without UI\ncargo build --release -p moush-cli\n./target/release/moush-cli host --port 24800"
-  };
-
-  tabBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.getAttribute("data-code");
-      if (!snippets[target] || !codeContent) return;
-
-      tabBtns.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      codeContent.textContent = snippets[target];
-    });
+  desk.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch") return;
+    takeOver();
+    point(...local(e));
   });
 
-  if (copyBtn && codeContent) {
-    copyBtn.addEventListener("click", () => {
-      const textToCopy = codeContent.textContent;
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        const originalText = copyBtn.textContent;
-        copyBtn.textContent = "✓ Copied!";
-        copyBtn.style.borderColor = "var(--brand-cyan)";
-        copyBtn.style.color = "var(--brand-cyan)";
+  desk.addEventListener("pointerdown", (e) => {
+    takeOver();
+    point(...local(e));
+  });
 
-        setTimeout(() => {
-          copyBtn.textContent = originalText;
-          copyBtn.style.borderColor = "";
-          copyBtn.style.color = "";
-        }, 2000);
-      });
-    });
-  }
-
-  // Quick winget snippet in hero
-  const quickWinget = document.getElementById("hero-winget-copy");
-  if (quickWinget) {
-    quickWinget.addEventListener("click", () => {
-      navigator.clipboard.writeText("winget install Moush").then(() => {
-        const badge = quickWinget.querySelector(".copy-badge");
-        if (badge) {
-          const prev = badge.textContent;
-          badge.textContent = "Copied!";
-          badge.style.color = "var(--brand-cyan)";
-          setTimeout(() => {
-            badge.textContent = prev;
-            badge.style.color = "";
-          }, 2000);
-        }
-      });
-    });
-  }
-}
-
-/* ==========================================================================
-   5. Header Scroll Effect
-   ========================================================================== */
-function initHeaderScroll() {
-  const header = document.querySelector(".site-header");
-  if (!header) return;
-
-  window.addEventListener("scroll", () => {
-    if (window.scrollY > 20) {
-      header.classList.add("scrolled");
+  desk.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      takeOver();
+      jumpTo(e.key === "ArrowLeft" ? "laptop" : "desktop");
+    } else if (e.key === "Backspace") {
+      takeOver();
+      const target = pcs[active].querySelector("[data-typed]");
+      fresh.delete(active);
+      target.textContent = target.textContent.slice(0, -1);
+    } else if (e.key.length === 1) {
+      takeOver();
+      type(active, e.key);
     } else {
-      header.classList.remove("scrolled");
+      return;
     }
+    e.preventDefault();
   });
+
+  // One short, explanatory run when the desk first comes into view: the cursor glides
+  // to the laptop, the desktop's keyboard types there, and it comes back. Stops the
+  // moment the visitor moves, clicks or types; never runs with reduced motion.
+  function play() {
+    let cancelled = false;
+    let frame = 0;
+    let timer = 0;
+    const wait = (ms) => new Promise((resolve) => (timer = setTimeout(resolve, ms)));
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const glide = (from, to, ms) =>
+      new Promise((resolve) => {
+        const start = performance.now();
+        const step = (now) => {
+          if (cancelled) return resolve();
+          const t = Math.min(1, (now - start) / ms);
+          const k = ease(t);
+          point(from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k);
+          if (t < 1) frame = requestAnimationFrame(step);
+          else resolve();
+        };
+        frame = requestAnimationFrame(step);
+      });
+
+    (async () => {
+      const y = (rects.top + rects.bottom) / 2;
+      const onMonitor = [rects.desktop.left + (rects.desktop.right - rects.desktop.left) * 0.55, y];
+      const onLaptop = [rects.laptop.left + (rects.laptop.right - rects.laptop.left) * 0.45, y];
+      await wait(500);
+      if (cancelled) return;
+      await glide(onMonitor, onLaptop, 1300);
+      for (const ch of "Typed with the desktop keyboard") {
+        if (cancelled) return;
+        type("laptop", ch);
+        await wait(45);
+      }
+      await wait(700);
+      if (cancelled) return;
+      await glide(onLaptop, onMonitor, 1300);
+    })();
+
+    return {
+      cancel() {
+        cancelled = true;
+        cancelAnimationFrame(frame);
+        clearTimeout(timer);
+      },
+    };
+  }
+
+  measure();
+  pcs.desktop.classList.add("is-active");
+  point(rects.desktop.left + (rects.desktop.right - rects.desktop.left) * 0.55, (rects.top + rects.bottom) / 2);
+
+  new ResizeObserver(measure).observe(desk);
+
+  if (!reducedMotion.matches && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        if (!interacted) autoplay = play();
+      },
+      { threshold: 0.6 },
+    );
+    io.observe(desk);
+  }
 }

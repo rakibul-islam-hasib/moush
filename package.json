@@ -2,6 +2,20 @@
   "name": "moush",
   "private": true,
   "version": "0.1.0",
+  "description": "Share one mouse and keyboard across Windows computers on a local network",
+  "license": "MIT",
+  "author": "Rakibul Islam and the Moush contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rakibul-islam-hasib/moush.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rakibul-islam-hasib/moush/issues"
+  },
+  "homepage": "https://rakibul-islam-hasib.github.io/moush/",
+  "engines": {
+    "node": ">=20.19"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +24,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@tauri-apps/api": "2.12.4",
     "react": "19.3.1",
     "react-dom": "19.3.1"

@@ -3,6 +3,7 @@
 //   &nav=compact      start with the navigation pane collapsed
 //   &expand=all|clipboard|history|keyboard|transfer|notifications   open Features expanders
 //   &drag=1           show the drag-and-drop overlay
+//   &clean=1          hide the "Preview data" panel (for screenshots)
 // Theme, motion and role are mock settings: see src/api/mock.ts (?theme=dark&mockRole=client).
 // Inside Tauri (backend.mock === null) none of this is active.
 
@@ -14,6 +15,7 @@ export interface DevParams {
   navCollapsed: boolean;
   expand: FeatureAnchor | "all" | null;
   drag: boolean;
+  clean: boolean;
 }
 
 const ANCHORS: readonly string[] = ["all", "clipboard", "history", "keyboard", "transfer", "notifications"];
@@ -27,6 +29,7 @@ function parse(): DevParams {
     navCollapsed: q.get("nav") === "compact",
     expand: expand && ANCHORS.includes(expand) ? (expand as FeatureAnchor | "all") : null,
     drag: q.get("drag") === "1",
+    clean: q.get("clean") === "1",
   };
 }
 

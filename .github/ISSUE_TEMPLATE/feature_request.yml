@@ -1,0 +1,57 @@
+name: Feature request
+description: Suggest a capability or a change to how Moush behaves.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Moush is Windows-only and deliberately small. Before describing the feature, check
+        the [guide](https://github.com/rakibul-islam-hasib/moush/blob/main/docs/GUIDE.md) and
+        the "What Windows does not allow" section of the README.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the workflow that is awkward or impossible today, not only the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Moush to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: Other tools, settings or manual steps you have tried.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this touch?
+      multiple: true
+      options:
+        - Input routing or layout
+        - Pairing, trust or transport
+        - Clipboard or text sharing
+        - File transfer
+        - UI or accessibility
+        - Installer, tray or autostart
+        - moush-cli
+        - Documentation or website
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions for this request.
+          required: true
+        - label: I understand that features on the input path must not add measurable latency.
+          required: true

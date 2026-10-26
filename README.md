@@ -1,8 +1,19 @@
 # Moush
 
+[![CI](https://github.com/rakibul-islam-hasib/moush/actions/workflows/ci.yml/badge.svg)](https://github.com/rakibul-islam-hasib/moush/actions/workflows/ci.yml)
+[![MIT license](https://img.shields.io/badge/license-MIT-74d68f)](LICENSE)
+![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-a39cff)
+![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-45d3e3)](CONTRIBUTING.md)
+[![Website](https://img.shields.io/badge/website-live-74d68f)](https://rakibul-islam-hasib.github.io/moush/)
+
 Use one mouse and keyboard across several Windows computers on the same network. Move the
 cursor off the edge of your desktop's monitors and it continues on your laptop; the
 keyboard follows the cursor. Move back and you are on the desktop again.
+
+**Status:** Moush is 0.x software and supports Windows 10 and 11 only. The wire protocol,
+settings format and UI may change before 1.0. macOS and Linux are not supported.
 
 ```
 [ Laptop ] [ Monitor 1 ] [ Monitor 2 ]      ← arranged in the layout editor, not hard-coded
@@ -37,10 +48,19 @@ keyboard follows the cursor. Move back and you are on the desktop again.
 - **Small.** ~2 MB installer, ~7 MB app; input path unaffected by transfers (see
   [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
 
+## See it in 100 seconds
+
+[![Moush launch film: one mouse and keyboard for every PC on your desk](website/assets/video/moush-film.jpg)](website/assets/video/moush-film.mp4)
+
+The film and its poster are in [`website/assets/video`](website/assets/video). Media credits
+are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Quick start
 
-1. Install Moush on both computers (`Moush_x.y.z_x64-setup.exe`, per-user, no
-   admin rights needed). Both must be on the same network.
+1. Download the latest `Moush_x.y.z_x64-setup.exe` from
+   [Releases](https://github.com/rakibul-islam-hasib/moush/releases/latest) and install it on
+   both computers. The installer is per-user and needs no admin rights. Both computers must
+   be on the same network.
 2. On the computer with the mouse and keyboard choose **Host**. When Windows asks whether
    Moush may communicate on networks, allow it on **private** networks. (Or use
    *Diagnostics → Add firewall rule*.)
@@ -81,8 +101,8 @@ The tray icon menu also has *Bring cursor back to this computer*.
 
 ## Building from source
 
-Requirements: Windows 10/11, Rust 1.85+ (MSVC toolchain), Node.js 20+, WebView2 runtime
-(preinstalled on Windows 11).
+Requirements: Windows 10/11, Rust 1.85+ (MSVC toolchain), Node.js 22+ (Vite 8 also accepts
+20.19+), WebView2 runtime (preinstalled on Windows 11).
 
 ```powershell
 npm install
@@ -123,3 +143,29 @@ real hooks, dry-run client, synthetic input; see the script header).
 
 Settings, the device identity (DPAPI-encrypted), paired devices and the layout are stored
 in `%APPDATA%\Moush`; logs in `%LOCALAPPDATA%\Moush\logs`.
+
+## Tech stack
+
+| Layer | Built with |
+| --- | --- |
+| Core engine | Rust 2024 edition: wire protocol, layout geometry, input router, discovery, pairing |
+| Transport | Noise XX (`snow`): X25519, ChaCha20-Poly1305, BLAKE2s over a single TCP connection |
+| Windows layer | Win32 low-level hooks, `SendInput`, DPAPI, via `windows` / `windows-sys` |
+| Desktop app | Tauri 2 (WebView2), tray icon, single-instance |
+| UI | React 19, TypeScript, Vite, Geist |
+
+## Contributing
+
+Issues and pull requests are welcome, from typo fixes to new features. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, where things live and what a PR needs, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for the community rules.
+
+## Security
+
+Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md). The threat model
+and the rules every feature module follows are in [docs/SECURITY.md](docs/SECURITY.md).
+
+## License
+
+[MIT](LICENSE). Fork it, change it, ship it. Third-party software, fonts and media are
+credited in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
