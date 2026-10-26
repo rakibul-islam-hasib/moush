@@ -1494,7 +1494,8 @@ mod tests {
         assert!(resolve_download_dir(r"\\.\PhysicalDrive0", &base).is_err());
         let d = resolve_download_dir("", &base.join("sub")).unwrap();
         assert!(d.is_dir() && d.ends_with("sub"));
-        assert_eq!(display_path(&d), base.join("sub"));
+        let expected = display_path(&fs::canonicalize(base.join("sub")).unwrap());
+        assert_eq!(display_path(&d), expected);
         assert!(default_download_dir().ends_with("Moush"));
         fs::remove_dir_all(&base).unwrap();
     }
