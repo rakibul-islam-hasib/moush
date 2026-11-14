@@ -43,8 +43,12 @@ export const isFinished = (s: TransferState) => s === "done" || s === "failed" |
 export const isLive = (s: TransferState) => s === "active" || s === "pending";
 
 export function transferTitle(t: TransferView): string {
-  const first = t.files[0]?.name ?? "Files";
-  return t.files.length > 1 ? `${first} and ${plural(t.files.length - 1, "more file")}` : first;
+  const first = t.files[0];
+  if (!first) return "Files";
+  const root = first.path.split("/")[0] || first.name;
+  // A plain file's path is its name; a folder transfer starts with the selected folder.
+  if (first.path === root) return first.name;
+  return t.files.length > 1 ? `${root} and ${plural(t.files.length - 1, "more item")}` : root;
 }
 
 export function formatSpeed(bytesPerSec: number): string {

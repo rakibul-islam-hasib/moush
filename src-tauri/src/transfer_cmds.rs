@@ -24,7 +24,14 @@ pub fn view(t: TransferInfo) -> TransferView {
         direction: if t.outgoing { "send" } else { "receive" },
         peer_id: t.peer_id,
         peer_name: t.peer_name,
-        files: t.files.into_iter().map(|f| TransferFile { name: f.name, size: f.size }).collect(),
+        files: t
+            .files
+            .into_iter()
+            .map(|f| {
+                let name = f.name().to_owned();
+                TransferFile { name, path: f.path, size: f.size, is_dir: f.is_dir }
+            })
+            .collect(),
         total_bytes: t.total_bytes,
         done_bytes: t.done_bytes,
         bytes_per_sec: t.bytes_per_sec,
@@ -42,7 +49,11 @@ pub fn on_event(app: &App, e: Event) {
     match e {
         Event::Changed => app.notify(),
         Event::Incoming { peer_name, files, bytes, needs_approval: true, .. } => {
-            let what = if files == 1 { "a file".to_string() } else { format!("{files} files") };
+            let what = match files {
+                0 => "a folder".to_string(),
+                1 => "a file".to_string(),
+                n => format!("{n} files"),
+            };
             notify::send(
                 app,
                 Kind::Transfer,
@@ -58,8 +69,8 @@ pub fn on_event(app: &App, e: Event) {
 fn finished(app: &App, t: &TransferInfo) {
     use xfer::State;
     let what = match t.files.as_slice() {
-        [one] => format!("\"{}\"", one.name),
-        files => format!("{} files", files.len()),
+        [one] => format!("\"{}\"", one.name()),
+        files => format!("{} files", files.iter().filter(|f| !f.is_dir).count()),
     };
     let peer = &t.peer_name;
     let (title, body) = match (t.state, t.outgoing) {
@@ -132,15 +143,21 @@ pub async fn pick_files(handle: AppHandle) -> Res<Vec<String>> {
 }
 
 #[tauri::command]
-pub async fn pick_folder(handle: AppHandle) -> Res<Option<String>> {
+pub async fn pick_folder(handle: AppHandle, title: Option<String>) -> Res<Option<String>> {
     let owner = owner(&handle);
-    blocking(move || Ok(dialogs::pick_folder(owner)?.map(|p| p.display().to_string()))).await
+    let title = title.unwrap_or_else(|| "Choose a folder".into());
+    blocking(move || Ok(dialogs::pick_folder(owner, &title)?.map(|p| p.display().to_string()))).await
 }
 
 #[tauri::command]
-pub async fn respond_transfer(app: State<'_, Arc<App>>, id: String, accept: bool) -> Res<()> {
+pub async fn respond_transfer(
+    app: State<'_, Arc<App>>,
+    id: String,
+    accept: bool,
+    destination: Option<String>,
+) -> Res<()> {
     let app = app.inner().clone();
-    blocking(move || app.transfers.respond(&id, accept)).await
+    blocking(move || app.transfers.respond_to(&id, accept, destination.map(PathBuf::from))).await
 }
 
 #[tauri::command]

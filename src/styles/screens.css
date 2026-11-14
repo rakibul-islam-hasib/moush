@@ -1137,6 +1137,22 @@ html[data-motion="reduce"] .conn-node::after {
   overflow-wrap: anywhere;
 }
 
+.transfer-save {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.transfer-save .path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .transfer-main .progress-bar {
   margin: 4px 0 2px;
 }

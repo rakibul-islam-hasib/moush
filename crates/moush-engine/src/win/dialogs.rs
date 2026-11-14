@@ -71,9 +71,10 @@ pub fn pick_files(owner: Option<isize>) -> Result<Vec<PathBuf>, String> {
     on_sta(move || open_dialog(owner, "Choose files to send", false))
 }
 
-/// Native folder picker; `None` when cancelled.
-pub fn pick_folder(owner: Option<isize>) -> Result<Option<PathBuf>, String> {
-    on_sta(move || open_dialog(owner, "Choose a folder", true)).map(|v| v.into_iter().next())
+/// Native folder picker; `None` when cancelled. `title` names the dialog.
+pub fn pick_folder(owner: Option<isize>, title: &str) -> Result<Option<PathBuf>, String> {
+    let title = title.to_owned();
+    on_sta(move || open_dialog(owner, &title, true)).map(|v| v.into_iter().next())
 }
 
 fn wide(p: &Path) -> Vec<u16> {

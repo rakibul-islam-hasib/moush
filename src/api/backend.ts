@@ -68,8 +68,10 @@ export const api = {
   /** Native file picker; resolves to [] when cancelled. */
   pickFiles: () => invoke<string[]>("pick_files"),
   /** Native folder picker; resolves to null when cancelled. */
-  pickFolder: () => invoke<string | null>("pick_folder"),
-  respondTransfer: (id: string, accept: boolean) => invoke<void>("respond_transfer", { id, accept }),
+  pickFolder: (title?: string) => invoke<string | null>("pick_folder", { title: title ?? null }),
+  /** Accepts or declines; destination is the folder the receiver picked for this transfer. */
+  respondTransfer: (id: string, accept: boolean, destination?: string | null) =>
+    invoke<void>("respond_transfer", { id, accept, destination: destination ?? null }),
   cancelTransfer: (id: string) => invoke<void>("cancel_transfer", { id }),
   retryTransfer: (id: string) => invoke<void>("retry_transfer", { id }),
   clearFinishedTransfers: () => invoke<void>("clear_finished_transfers"),

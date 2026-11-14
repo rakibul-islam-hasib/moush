@@ -36,8 +36,8 @@ export function DropOverlay({ snapshot, settings }: { snapshot: AppSnapshot; set
     ? "Can't send files right now"
     : available.length === 1
       ? `Drop to send to ${available[0].name}`
-      : "Drop to send files";
-  const detail = reason ?? (available.length === 1 ? "The files go straight to that computer." : "You'll choose the computer next.");
+      : "Drop to send files and folders";
+  const detail = reason ?? (available.length === 1 ? "They go straight to that computer." : "You'll choose the computer next.");
   return (
     <div className={cx("drop-overlay", reason && "is-blocked")} role="status" aria-live="assertive">
       <div className="drop-overlay-frame">
@@ -84,7 +84,7 @@ export function SendTargetDialog({ snapshot, settings, paths, onSent, onClose }:
 
   return (
     <Dialog
-      title={`Send ${plural(paths.length, "file")} to…`}
+      title={`Send ${plural(paths.length, "item")} to…`}
       closing={closing}
       onDismiss={busy ? undefined : close}
       initialFocus={sendRef}

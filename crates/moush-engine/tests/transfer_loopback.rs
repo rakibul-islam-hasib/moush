@@ -475,7 +475,7 @@ fn sends_several_files_including_a_large_one_with_verified_hashes() {
         assert!(zone.contains("ZoneId=3"), "{saved} carries the Mark of the Web");
     }
     assert_eq!(fs::read(rig.host.dir.join("one.bin")).unwrap(), b"keep me");
-    assert!(inc.files.iter().any(|f| f.name == "one (1).bin"), "the list shows the saved name");
+    assert!(inc.files.iter().any(|f| f.name() == "one (1).bin"), "the list shows the saved name");
 
     // Streaming: memory does not grow with the file size, and the wire carried the data
     // once in chunks (plus encryption and framing overhead).
@@ -609,7 +609,7 @@ fn offers_need_approval_and_can_be_declined() {
     let id = rig.client.svc.send(&rig.client.peer(), std::slice::from_ref(&src)).unwrap();
     let inc = incoming_state(&rig.host, State::Pending);
     assert!(inc.awaiting_approval);
-    assert_eq!(inc.files, vec![FileEntry { name: "notes.txt".into(), size: 1000 }]);
+    assert_eq!(inc.files, vec![FileEntry { path: "notes.txt".into(), size: 1000, is_dir: false }]);
     assert!(
         rig.host
             .events
@@ -655,7 +655,7 @@ fn refused(rig: &Rig, id: u64) -> TransferInfo {
 fn hostile_and_oversized_offers_are_refused() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let rig = Rig::new("hostile");
-    let f = |name: &str, size| FileEntry { name: name.into(), size };
+    let f = |name: &str, size| FileEntry { path: name.into(), size, is_dir: false };
 
     for (i, name) in [r"..\..\evil.exe", "../x", r"C:\Windows\x.dll", "a:b", ".."].iter().enumerate() {
         let id = 100 + i as u64;
@@ -685,9 +685,83 @@ fn hostile_and_oversized_offers_are_refused() {
     raw_offer(&rig, 500, &[f("con.txt", 0), f("report.pdf. ", 0)]);
     let ui = format!("r{:016x}", 500u64);
     assert!(wait_until(Duration::from_secs(5), || rig.host.svc.get(&ui).is_some()));
-    let names: Vec<String> = rig.host.info(&ui).files.into_iter().map(|f| f.name).collect();
+    let names: Vec<String> = rig.host.info(&ui).files.into_iter().map(|f| f.name().to_owned()).collect();
     assert_eq!(names, ["_con.txt", "report.pdf"]);
     assert!(fs::read_dir(&rig.host.dir).unwrap().all(|e| e.unwrap().path().parent() == Some(rig.host.dir.as_path())));
+}
+
+#[test]
+fn sends_a_folder_tree_and_the_receiver_picks_the_destination() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let rig = Rig::new("folder");
+    rig.host.set(|s| s.ask_before_receiving = true);
+    let src = rig.root.join("Album");
+    fs::create_dir_all(src.join("2024")).unwrap();
+    fs::create_dir_all(src.join("empty")).unwrap();
+    make_file(&src.join("cover.jpg"), 5000, 1);
+    make_file(&src.join("2024/a.png"), 70_000, 2);
+    make_file(&src.join("2024/b.bin"), 0, 3);
+
+    let dest = rig.root.join("Picked");
+    fs::create_dir_all(&dest).unwrap();
+
+    let id = rig.client.svc.send(&rig.client.peer(), std::slice::from_ref(&src)).unwrap();
+    let inc = incoming_state(&rig.host, State::Pending);
+    assert!(inc.awaiting_approval);
+    let paths: Vec<&str> = inc.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, ["Album/2024/a.png", "Album/2024/b.bin", "Album/cover.jpg", "Album/empty"]);
+    assert!(inc.files.iter().any(|f| f.is_dir && f.path == "Album/empty"));
+    assert_eq!(inc.destination.as_deref(), Some(rig.host.dir.as_path()), "the default is shown while pending");
+
+    rig.host.svc.respond_to(&inc.id, true, Some(dest.clone())).unwrap();
+    let out = wait_state(&rig.client, &id, State::Done);
+    assert_eq!(out.done_bytes, out.total_bytes);
+    let inc = wait_state(&rig.host, &inc.id, State::Done);
+    assert_eq!(inc.destination.as_deref(), Some(dest.as_path()), "saved where the receiver chose");
+    assert_eq!(file_hash(&dest.join("Album/cover.jpg")), file_hash(&src.join("cover.jpg")));
+    assert_eq!(file_hash(&dest.join("Album/2024/a.png")), file_hash(&src.join("2024/a.png")));
+    assert_eq!(fs::metadata(dest.join("Album/2024/b.bin")).unwrap().len(), 0);
+    assert!(dest.join("Album/empty").is_dir(), "the empty folder was created");
+    assert!(inc.files.iter().all(|f| f.path.starts_with("Album/")), "paths are shown relative to the picked folder");
+    assert!(rig.host.parts().is_empty(), "no partial files are left behind");
+    assert!(
+        fs::read_dir(&dest).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(tr::PART_SUFFIX)),
+        "partial files are not left in the picked folder"
+    );
+}
+
+#[test]
+fn folder_retry_resumes_into_the_same_picked_folder() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let mut rig = Rig::new("folder-resume");
+    rig.host.set(|s| s.ask_before_receiving = true);
+    let src = rig.root.join("Big");
+    fs::create_dir_all(src.join("sub")).unwrap();
+    let size = 16u64 << 20;
+    make_file(&src.join("sub/data.bin"), size, 21);
+    let dest = rig.root.join("Picked");
+    fs::create_dir_all(&dest).unwrap();
+
+    let id = rig.client.svc.send(&rig.client.peer(), std::slice::from_ref(&src)).unwrap();
+    let inc = incoming_state(&rig.host, State::Pending);
+    rig.host.svc.respond_to(&inc.id, true, Some(dest.clone())).unwrap();
+    assert!(wait_until(WAIT, || rig.host.incoming().is_some_and(|t| t.done_bytes > 4 << 20)), "data is flowing");
+    rig.disconnect();
+    let out = wait_state(&rig.client, &id, State::Failed);
+    assert!(out.error.as_deref().unwrap().contains("Lost the connection"), "{out:?}");
+    assert!(wait_until(Duration::from_secs(10), || rig.client.info(&id).can_retry));
+    let inc = incoming_state(&rig.host, State::Failed);
+    assert_eq!(inc.destination.as_deref(), Some(dest.as_path()));
+
+    rig.connect();
+    rig.client.svc.retry(&id).unwrap();
+    let inc = incoming_state(&rig.host, State::Pending);
+    assert_eq!(inc.destination.as_deref(), Some(dest.as_path()), "the picked folder is remembered");
+    rig.host.svc.respond_to(&inc.id, true, None).unwrap();
+    wait_state(&rig.client, &id, State::Done);
+    incoming_state(&rig.host, State::Done);
+    assert_eq!(file_hash(&dest.join("Big/sub/data.bin")), file_hash(&src.join("sub/data.bin")));
+    assert!(rig.host.parts().is_empty(), "no partial files are left behind");
 }
 
 #[test]
@@ -706,7 +780,6 @@ fn sending_requires_the_feature_on_both_sides() {
     assert!(wait_until(Duration::from_secs(5), || rig.client.hub.effective_caps(&peer) & cap::FILES == 0));
     let err = rig.client.svc.send(&peer, std::slice::from_ref(&src)).unwrap_err();
     assert!(err.contains("does not accept files"), "{err}");
-    assert!(rig.client.svc.send(&peer, std::slice::from_ref(&rig.root)).is_err(), "folders are refused");
 }
 
 /// Throughput per speed setting and input latency while a transfer runs host -> client

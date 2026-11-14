@@ -7,7 +7,7 @@ import { InfoBar } from "../components/InfoBar";
 import { Page } from "../components/Page";
 import { ProgressBar } from "../components/ProgressBar";
 import { Select, type SelectOption } from "../components/Select";
-import { noTargetReason, TargetList, targetArg } from "../components/SendFiles";
+import { fileName, noTargetReason, TargetList, targetArg } from "../components/SendFiles";
 import { CardGroup, EmptyState } from "../components/SettingsCard";
 import { TextArea } from "../components/TextBox";
 import { useAction } from "../hooks/useAction";
@@ -37,7 +37,7 @@ function SendPanel({ onNavigate }: { onNavigate: Navigate }) {
 
   const pick = async () => {
     const ok = await run(
-      "pick",
+      "pick-files",
       async () => {
         const paths = await backend.api.pickFiles();
         if (paths.length === 0) return;
@@ -49,17 +49,34 @@ function SendPanel({ onNavigate }: { onNavigate: Navigate }) {
     return ok;
   };
 
+  const pickFolder = async () => {
+    const ok = await run(
+      "pick-folder",
+      async () => {
+        const path = await backend.api.pickFolder("Choose a folder to send");
+        if (!path) return;
+        await backend.api.sendFiles(targetArg(snapshot, target), [path]);
+        toast.notify("success", `Offered ${fileName(path)} to ${available.find((p) => p.id === target)?.name ?? "the other computer"}.`);
+      },
+      "Couldn't send the folder",
+    );
+    return ok;
+  };
+
   return (
-    <CardGroup title="Send files">
+    <CardGroup title="Send files and folders">
       <div className={cx("send-panel", reason && "is-blocked")}>
         <div className="drop-zone">
           <span className="drop-zone-icon">
             <Icon name="dropFiles" size={32} />
           </span>
-          <span className="drop-zone-title">Drag files onto this window</span>
+          <span className="drop-zone-title">Drag files or folders onto this window</span>
           <span className="drop-zone-text">{reason ?? "Or choose them yourself. They go only to the computer you pick."}</span>
-          <Button variant="accent" icon="upload" busy={busy === "pick"} disabled={reason !== null || target === null} onClick={() => void pick()}>
+          <Button variant="accent" icon="upload" busy={busy === "pick-files"} disabled={reason !== null || target === null} onClick={() => void pick()}>
             Send files…
+          </Button>
+          <Button icon="folder" busy={busy === "pick-folder"} disabled={reason !== null || target === null} onClick={() => void pickFolder()}>
+            Send a folder…
           </Button>
           {reason && !settings.transfer.enabled && (
             <Button variant="subtle" size="small" onClick={() => onNavigate("features", "transfer")}>
@@ -103,6 +120,18 @@ const TransferRow = memo(function TransferRow({ t, now, busy, run }: RowProps) {
   const eta = formatEta(t);
   const key = (a: string) => `${t.id}:${a}`;
   const act = (a: string, fn: () => Promise<unknown>, err: string) => void run(key(a), fn, err);
+  const [dest, setDest] = useState<string | null>(null);
+  const saveTo = dest ?? t.destination;
+
+  const chooseDest = () =>
+    void run(
+      key("dest"),
+      async () => {
+        const dir = await backend.api.pickFolder("Choose where to save these files");
+        if (dir) setDest(dir);
+      },
+      "Couldn't open the folder picker",
+    );
 
   let detail: string;
   switch (t.state) {
@@ -129,15 +158,21 @@ const TransferRow = memo(function TransferRow({ t, now, busy, run }: RowProps) {
       </span>
       <div className="transfer-main">
         <div className="transfer-head">
-          <span className="transfer-title" title={t.files.map((f) => f.name).join("\n")}>
+          <span className="transfer-title" title={t.files.map((f) => f.path).join("\n")}>
             {title}
           </span>
           <Badge tone={state.tone}>{state.label}</Badge>
         </div>
         <span className="transfer-peer">
           {send ? "To" : "From"} {t.peerName}
-          {t.files.length > 1 && ` · ${plural(t.files.length, "file")}`}
+          {t.files.length > 1 && ` · ${plural(t.files.length, "item")}`}
         </span>
+        {t.state === "pending" && !send && (
+          <span className="transfer-save" title={saveTo ?? undefined}>
+            <Icon name="folder" size={16} />
+            <span className="path">{saveTo ?? "the download folder"}</span>
+          </span>
+        )}
         {(t.state === "active" || (t.state === "failed" && t.doneBytes > 0)) && (
           <ProgressBar
             value={pct}
@@ -152,7 +187,10 @@ const TransferRow = memo(function TransferRow({ t, now, busy, run }: RowProps) {
       <div className="transfer-actions">
         {t.state === "pending" && !send && (
           <>
-            <Button variant="accent" icon="checkmark" busy={busy === key("accept")} onClick={() => act("accept", () => backend.api.respondTransfer(t.id, true), "Couldn't accept")}>
+            <Button icon="folder" busy={busy === key("dest")} onClick={chooseDest}>
+              Save to…
+            </Button>
+            <Button variant="accent" icon="checkmark" busy={busy === key("accept")} onClick={() => act("accept", () => backend.api.respondTransfer(t.id, true, dest), "Couldn't accept")}>
               Accept
             </Button>
             <Button icon="dismiss" busy={busy === key("decline")} onClick={() => act("decline", () => backend.api.respondTransfer(t.id, false), "Couldn't decline")}>
@@ -204,7 +242,7 @@ function TransferList() {
     >
       {waiting.length > 0 && (
         <InfoBar severity="warning" title={waiting.length === 1 ? "A computer wants to send you files" : `${waiting.length} transfers are waiting for you`}>
-          Accept to save them in your download folder, or decline.
+          Choose where to save them with <strong>Save to…</strong>, then accept — or decline.
         </InfoBar>
       )}
       {transfers.length === 0 ? (

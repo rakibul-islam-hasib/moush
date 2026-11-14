@@ -82,12 +82,14 @@ Content that password managers mark as sensitive is skipped. *Features → Clipb
 the per-format switches, a size limit and an in-memory history (never written to disk)
 where earlier clips can be copied again.
 
-### Sending files, text and links
+### Sending files, folders, text and links
 
-- Drag files onto the Moush window (or use **Transfers → Send files…**). The other
-  computer asks before accepting (configurable) and saves them to `Downloads\Moush`
-  (configurable). Progress, speed, cancel and retry (resumes partial files) are on the
-  **Transfers** page. Folders are not supported yet — zip them first.
+- Drag files or folders onto the Moush window (or use **Transfers → Send files… /
+  Send a folder…**). The other computer asks before accepting (configurable). In the
+  pending transfer, **Save to…** chooses the folder for that transfer (the default is
+  `Downloads\Moush`, configurable in Features). Folder names and the folder tree are
+  preserved, including empty folders. Progress, speed, cancel and retry (resumes partial
+  files) are on the **Transfers** page.
 - Received files are never opened automatically and carry the Windows "downloaded from
   the internet" mark, so Windows warns before running them.
 - **Share a text, link or snippet** on the Transfers page sends it to the other computer,
@@ -107,7 +109,8 @@ computers allow it.
   (client), and the **Screen layout** tab (host) to place each computer's monitors.
 - **Features** — clipboard, keyboard & switching, file transfer and notification settings,
   clipboard history.
-- **Transfers** — send files, approve incoming transfers, shared text and links.
+- **Transfers** — send files and folders, choose where to save incoming transfers,
+  shared text and links.
 - **Settings** — device name, role, appearance (theme, transparency, animations), startup,
   network, reset to defaults, and **Diagnostics** (firewall state, latency, device id,
   logs, *Add firewall rule*).

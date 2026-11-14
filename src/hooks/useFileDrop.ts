@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { inTauri } from "../api/backend";
 
 /**
- * Files dragged onto the window. Inside Tauri the webview reports absolute paths
- * (onDragDropEvent); in the browser preview the HTML5 drop gives only names, so
- * paths are simulated for the mock backend. Returns true while files hover the window.
+ * Files and folders dragged onto the window. Inside Tauri the webview reports absolute
+ * paths (onDragDropEvent); in the browser preview the HTML5 drop gives only names, so
+ * paths are simulated for the mock backend. Returns true while something hovers the window.
  */
 export function useFileDrop(onDrop: (paths: string[]) => void, enabled = true): boolean {
   const [over, setOver] = useState(false);

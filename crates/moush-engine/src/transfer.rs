@@ -1,6 +1,7 @@
-//! File transfer service on channel [`channel::FILES`]: sends files from disk and receives
-//! them into the download folder, with progress, cancellation from either side, resume
-//! after a failure, integrity checks and per-device authorization.
+//! File and folder transfer service on channel [`channel::FILES`]: sends files and folder
+//! trees from disk and receives them into the download folder (or the folder the receiver
+//! picked for that transfer), with progress, cancellation from either side, resume after a
+//! failure, integrity checks and per-device authorization.
 //!
 //! Threads: `on_message` (a connection's reader thread) only decodes, releases flow-control
 //! credit for acks and hands everything else to a bounded queue. One control thread
@@ -10,12 +11,13 @@
 //! use per transfer is one chunk buffer plus the bounded queues, whatever the file size.
 //!
 //! Receiving: data goes to `<name>.<tag>.moushpart` in the destination folder; after the
-//! sender's `FileDone` the file is flushed to disk, its BLAKE2s-256 checked, renamed into
-//! place (never replacing an existing file unless the overwrite policy says so) and marked
-//! as downloaded from the internet (Zone.Identifier stream), so Windows applies the same
-//! checks as for a browser download. Received files are never opened or executed.
+//! sender's `FileDone` the file is flushed to disk, its BLAKE2s-256 checked, moved to its
+//! relative path (creating folders as needed, never replacing an existing file unless the
+//! overwrite policy says so) and marked as downloaded from the internet (Zone.Identifier
+//! stream), so Windows applies the same checks as for a browser download. Empty folders
+//! are created after the files are in place. Received files are never opened or executed.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::windows::ffi::OsStrExt;
@@ -164,13 +166,18 @@ impl Attempt {
 
 struct Status {
     files: Vec<FileEntry>,
-    /// Send: the files on disk.
-    sources: Vec<PathBuf>,
+    /// Send: the file on disk for each entry (`None` for folder entries).
+    sources: Vec<Option<PathBuf>>,
+    /// Send: the files and folders as they were selected, re-read on retry.
+    roots: Vec<PathBuf>,
     total: u64,
     state: State,
     error: Option<String>,
     finished_at: Option<u64>,
+    /// Receive: the folder the files are saved to (the configured one while waiting).
     destination: Option<PathBuf>,
+    /// Receive: the folder the user picked for this transfer.
+    chosen_dir: Option<PathBuf>,
     /// The file to select in Explorer.
     reveal: Option<PathBuf>,
     meter: RateMeter,
@@ -303,7 +310,7 @@ impl TransferService {
     pub fn send(&self, peer_id: &str, paths: &[PathBuf]) -> Result<String, String> {
         let inner = &self.inner;
         let peer = inner.sendable_peer(peer_id)?;
-        let (files, sources) = stat_sources(paths)?;
+        let (files, sources) = collect_sources(paths)?;
         let outgoing = inner.transfers.lock().unwrap().iter().filter(|t| t.outgoing && !t.state().is_final()).count();
         if outgoing >= MAX_OUTGOING {
             return Err("Too many transfers are waiting. Try again when some have finished.".into());
@@ -315,7 +322,7 @@ impl TransferService {
             }
         };
         log::info!(
-            "transfer s{id:016x}: sending {} file(s), {} bytes",
+            "transfer s{id:016x}: sending {} item(s), {} bytes",
             files.len(),
             files.iter().map(|f| f.size).sum::<u64>()
         );
@@ -330,10 +337,12 @@ impl TransferService {
                 total: files.iter().map(|f| f.size).sum(),
                 files,
                 sources,
+                roots: paths.to_vec(),
                 state: State::Pending,
                 error: None,
                 finished_at: None,
                 destination: None,
+                chosen_dir: None,
                 reveal: paths.first().cloned(),
                 meter: RateMeter::default(),
                 approval_deadline: None,
@@ -351,6 +360,12 @@ impl TransferService {
 
     /// Answers an incoming offer that waits for approval.
     pub fn respond(&self, id: &str, accept: bool) -> Result<(), String> {
+        self.respond_to(id, accept, None)
+    }
+
+    /// Answers an incoming offer that waits for approval. `destination` is the folder the
+    /// receiver picked for this transfer; `None` uses the configured download folder.
+    pub fn respond_to(&self, id: &str, accept: bool, destination: Option<PathBuf>) -> Result<(), String> {
         let t = self.inner.by_ui_id(id).ok_or("This transfer no longer exists.")?;
         let waiting = {
             let s = t.st.lock().unwrap();
@@ -367,6 +382,12 @@ impl TransferService {
                     Some("File transfer is turned off.".into()),
                 );
                 return Err("File transfer is turned off for this device.".into());
+            }
+            if let Some(dir) = destination {
+                let dir = resolve_dir(&dir)?;
+                let mut s = t.st.lock().unwrap();
+                s.chosen_dir = Some(dir.clone());
+                s.destination = Some(display_path(&dir));
             }
             self.inner.start_receiver(&t);
         } else {
@@ -406,15 +427,18 @@ impl TransferService {
             return Err("Only failed or cancelled transfers you sent can be retried.".into());
         }
         inner.sendable_peer(&t.peer_id)?;
-        let sources = t.st.lock().unwrap().sources.clone();
-        let (files, _) = stat_sources(&sources)?;
+        let roots = t.st.lock().unwrap().roots.clone();
+        let (files, sources) = collect_sources(&roots)?;
         {
             let mut s = t.st.lock().unwrap();
-            if s.files.iter().map(|f| &f.name).ne(files.iter().map(|f| &f.name)) {
+            let same = s.files.len() == files.len()
+                && s.files.iter().zip(&files).all(|(a, b)| a.path == b.path && a.is_dir == b.is_dir);
+            if !same {
                 return Err("The files changed; send them again.".into());
             }
             s.total = files.iter().map(|f| f.size).sum();
             s.files = files;
+            s.sources = sources;
             s.state = State::Pending;
             s.error = None;
             s.finished_at = None;
@@ -487,7 +511,7 @@ impl FeatureService for TransferService {
             }
         };
         let inner = &self.inner;
-        if let Msg::Offer { .. } = msg {
+        if matches!(msg, Msg::Offer { .. } | Msg::OfferV2 { .. }) {
             if inner.control.try_send(Control::Offer(peer_id.to_owned(), msg)).is_err() {
                 log::warn!("file transfer offers arrive too fast; dropping one");
             }
@@ -778,7 +802,11 @@ fn expire(inner: &Arc<Inner>) {
 }
 
 fn on_offer(inner: &Arc<Inner>, peer: &str, msg: Msg) {
-    let Msg::Offer { id, total_files, total_bytes, first, files } = msg else { return };
+    let (id, total_files, total_bytes, first, files) = match msg {
+        Msg::Offer { id, total_files, total_bytes, first, files }
+        | Msg::OfferV2 { id, total_files, total_bytes, first, files } => (id, total_files, total_bytes, first, files),
+        _ => return,
+    };
     let key = (peer.to_owned(), id);
     let complete = {
         let mut asm = inner.assembling.lock().unwrap();
@@ -854,10 +882,12 @@ fn new_incoming(peer: &str, peer_name: &str, id: u64, files: Vec<FileEntry>) -> 
             total: files.iter().map(|f| f.size).sum(),
             files,
             sources: Vec::new(),
+            roots: Vec::new(),
             state: State::Pending,
             error: None,
             finished_at: None,
             destination: None,
+            chosen_dir: None,
             reveal: None,
             meter: RateMeter::default(),
             approval_deadline: None,
@@ -874,17 +904,21 @@ impl Inner {
     fn remove_final(&self, peer: &str, id: u64) {
         self.transfers.lock().unwrap().retain(|t| !(t.id == id && t.peer_id == peer && t.state().is_final()));
     }
+
+    /// Shows the configured save folder while an offer waits for the user's answer.
+    fn set_pending_destination(&self, t: &Arc<Transfer>) {
+        let settings = self.settings();
+        let setting = settings.download_dir.trim();
+        let dir = if setting.is_empty() { self.default_dir.clone() } else { PathBuf::from(setting) };
+        t.st.lock().unwrap().destination = Some(display_path(&dir));
+    }
 }
 
 fn offer_complete(inner: &Arc<Inner>, peer: &str, id: u64, files: Vec<FileEntry>) {
-    let mut names = Vec::with_capacity(files.len());
-    for f in &files {
-        match tr::check_offered_name(&f.name) {
-            Ok(n) => names.push(n),
-            Err(e) => return refuse(inner, peer, id, e),
-        }
-    }
-    tr::dedupe_names(&mut names);
+    let files = match tr::prepare_offer(&files) {
+        Ok(files) => files,
+        Err(e) => return refuse(inner, peer, id, e),
+    };
     let Some(hub) = inner.hub() else { return };
     let Some(summary) = hub.peer(peer) else { return };
     if !inner.receive_allowed(peer) {
@@ -896,11 +930,22 @@ fn offer_complete(inner: &Arc<Inner>, peer: &str, id: u64, files: Vec<FileEntry>
         inner.tell(peer, Msg::Reject { id, reason: "Duplicate transfer id.".into() });
         return;
     }
-    let files: Vec<FileEntry> =
-        names.into_iter().zip(&files).map(|(name, f)| FileEntry { name, size: f.size }).collect();
-    let count = files.len();
+    let count = files.iter().filter(|f| !f.is_dir).count();
+    // A retry of the same transfer keeps the folder the receiver picked last time.
+    let previous_dir = inner
+        .find(peer, id)
+        .or_else(|| inner.by_ui_id(&ui_id))
+        .and_then(|old| old.st.lock().unwrap().chosen_dir.clone());
     let t = new_incoming(peer, &summary.name, id, files);
     let total = t.st.lock().unwrap().total;
+    match previous_dir {
+        Some(dir) => {
+            let mut s = t.st.lock().unwrap();
+            s.chosen_dir = Some(dir.clone());
+            s.destination = Some(display_path(&dir));
+        }
+        None => inner.set_pending_destination(&t),
+    }
     let ask = inner.settings().ask_before_receiving;
     if ask {
         t.st.lock().unwrap().approval_deadline = Some(Instant::now() + APPROVAL_TIMEOUT);
@@ -1026,7 +1071,11 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
     inner.changed();
 
     let mut buf = vec![0u8; tr::CHUNK];
-    for (i, (f, path)) in files.iter().zip(&sources).enumerate() {
+    for (i, (f, source)) in files.iter().zip(&sources).enumerate() {
+        if f.is_dir {
+            continue;
+        }
+        let path = source.as_deref().ok_or_else(|| Abort::Error(format!("Cannot read {}.", f.path)))?;
         let (offset, prefix) = match accept.starts()[i] {
             Start::Skip => {
                 t.done.fetch_add(f.size, Ordering::Relaxed);
@@ -1034,15 +1083,15 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
             }
             Start::At { offset, prefix } => (offset, prefix),
         };
-        let mut file = File::open(path).map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.name)))?;
+        let mut file = File::open(path).map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.path)))?;
         if file.metadata()?.len() != f.size {
-            return Err(Abort::Error(format!("{} changed after it was offered.", f.name)));
+            return Err(Abort::Error(format!("{} changed after it was offered.", f.path)));
         }
         let mut hasher = tr::HashState::default();
         let mut pos = 0;
         if offset > 0 {
             let own = tr::hash_prefix(&mut file, offset, || a.stop().is_some())
-                .map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.name)))?;
+                .map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.path)))?;
             pos = tr::resume_from(offset, &prefix, &tr::finish_hash(&own));
             if pos > 0 {
                 hasher = own;
@@ -1059,7 +1108,7 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
             // Nothing but Complete is expected now; drain stray input so the queue stays empty.
             while let Ok(Input::Peer(_) | Input::Wake) = rx.try_recv() {}
             let n = (f.size - pos).min(tr::CHUNK as u64) as usize;
-            file.read_exact(&mut buf[..n]).map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.name)))?;
+            file.read_exact(&mut buf[..n]).map_err(|e| Abort::Error(format!("Cannot read {}: {e}", f.path)))?;
             tr::hash_update(&mut hasher, &buf[..n]);
             match a.window.acquire(n, SEND_TIMEOUT) {
                 Acquire::Ok => {}
@@ -1083,7 +1132,8 @@ fn send(inner: &Arc<Inner>, t: &Arc<Transfer>, a: &Attempt, rx: &Receiver<Input>
 
 /// Receive-side runtime state of one file.
 struct RxFile {
-    name: String,
+    /// Relative path within the transfer; updated if the file is renamed into place.
+    path: String,
     part: PathBuf,
     skip: bool,
     done: bool,
@@ -1125,20 +1175,39 @@ fn receive(
     rx_files: &mut Vec<RxFile>,
 ) -> Result<(), Abort> {
     let settings = inner.settings();
-    let dir = resolve_download_dir(&settings.download_dir, &inner.default_dir).map_err(Abort::Refuse)?;
+    let chosen = t.st.lock().unwrap().chosen_dir.clone();
+    let dir = match chosen {
+        Some(dir) => resolve_dir(&dir).map_err(Abort::Refuse)?,
+        None => resolve_download_dir(&settings.download_dir, &inner.default_dir).map_err(Abort::Refuse)?,
+    };
     t.st.lock().unwrap().destination = Some(dir.clone());
     remove_stale_parts(&dir);
     let policy = tr::Overwrite::from_setting(&settings.overwrite);
     let files = t.st.lock().unwrap().files.clone();
     let cancelled = || a.stop().is_some();
 
-    // Plan: skip, resume from a partial file, or start fresh.
+    // Plan: skip, resume from a partial file, or start fresh. Empty folders are created
+    // after the files, so a declined or cancelled transfer leaves as little behind as
+    // possible.
     let mut resume = Vec::new();
     let mut needed = 0u64;
     let mut have = 0u64;
+    let mut empty_dirs = Vec::new();
     for (i, f) in files.iter().enumerate() {
-        let part = dir.join(tr::part_name(&f.name, t.id));
-        let skip = policy == tr::Overwrite::Skip && dir.join(&f.name).symlink_metadata().is_ok();
+        if f.is_dir {
+            empty_dirs.push(f.path.clone());
+            rx_files.push(RxFile {
+                path: f.path.clone(),
+                part: PathBuf::new(),
+                skip: false,
+                done: true,
+                state: ReceiveFile::new(0),
+                file: None,
+            });
+            continue;
+        }
+        let part = dir.join(tr::part_name(&f.path, t.id));
+        let skip = policy == tr::Overwrite::Skip && dir.join(&f.path).symlink_metadata().is_ok();
         let mut state = ReceiveFile::new(f.size);
         if skip {
             resume.push(Resume { index: i as u32, offset: tr::SKIP, prefix: [0; 32] });
@@ -1149,7 +1218,7 @@ fn receive(
             if offset > 0 {
                 // Errors while stopped are ignored by `end_worker`.
                 let unreadable =
-                    |e: io::Error| Abort::Refuse(format!("Cannot read the partial copy of {}: {e}", f.name));
+                    |e: io::Error| Abort::Refuse(format!("Cannot read the partial copy of {}: {e}", f.path));
                 let mut file = File::open(&part).map_err(unreadable)?;
                 let hasher = tr::hash_prefix(&mut file, offset, cancelled).map_err(unreadable)?;
                 resume.push(Resume { index: i as u32, offset, prefix: tr::finish_hash(&hasher) });
@@ -1158,7 +1227,7 @@ fn receive(
             }
             needed += f.size - offset;
         }
-        rx_files.push(RxFile { name: f.name.clone(), part, skip, done: skip, state, file: None });
+        rx_files.push(RxFile { path: f.path.clone(), part, skip, done: skip, state, file: None });
     }
     if let Some(free) = free_space(&dir)
         && free < needed.saturating_add(DISK_RESERVE)
@@ -1196,7 +1265,7 @@ fn receive(
                 if index as usize != i {
                     return Err(Abort::Error("File data arrived out of order.".into()));
                 }
-                let at = f.state.check(offset, data.len()).map_err(|e| Abort::Error(format!("{}: {e}.", f.name)))?;
+                let at = f.state.check(offset, data.len()).map_err(|e| Abort::Error(format!("{}: {e}.", f.path)))?;
                 let before = f.state.written();
                 let file = open_part(&mut f.file, &f.part, before)?;
                 if at == WriteAt::Restart {
@@ -1204,7 +1273,7 @@ fn receive(
                     file.seek(SeekFrom::Start(0))?;
                     t.done.fetch_sub(before, Ordering::Relaxed);
                 }
-                file.write_all(&data).map_err(|e| Abort::Error(format!("Cannot save {}: {e}", f.name)))?;
+                file.write_all(&data).map_err(|e| Abort::Error(format!("Cannot save {}: {e}", f.path)))?;
                 f.state.commit(at, &data);
                 t.done.fetch_add(data.len() as u64, Ordering::Relaxed);
                 // Acknowledge after the write: a slow disk slows the sender down.
@@ -1232,28 +1301,33 @@ fn receive(
                 if let Err(e) = f.state.verify(size, &hash) {
                     drop(file);
                     let _ = fs::remove_file(&f.part);
-                    return Err(Abort::Error(format!("{}: {e}.", f.name)));
+                    return Err(Abort::Error(format!("{}: {e}.", f.path)));
                 }
                 file.flush()?;
-                file.sync_all().map_err(|e| Abort::Error(format!("Cannot save {}: {e}", f.name)))?;
+                file.sync_all().map_err(|e| Abort::Error(format!("Cannot save {}: {e}", f.path)))?;
                 drop(file);
-                match place_file(&f.part, &dir, &f.name, policy) {
+                match place_file(&f.part, &dir, &f.path, policy) {
                     Ok(Some(dest)) => {
                         let saved = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        f.path = tr::replace_name(&f.path, &saved);
                         let mut s = t.st.lock().unwrap();
                         if let Some(entry) = s.files.get_mut(i) {
-                            entry.name = saved;
+                            entry.path = f.path.clone();
                         }
                         s.reveal = Some(dest);
                     }
                     Ok(None) => log::info!("transfer {}: file {i} skipped (name exists)", t.ui_id),
-                    Err(e) => return Err(Abort::Error(format!("Cannot save {}: {e}", f.name))),
+                    Err(e) => return Err(Abort::Error(format!("Cannot save {}: {e}", f.path))),
                 }
                 f.done = true;
                 inner.changed();
             }
             _ => return Err(Abort::Error("Unexpected file transfer message.".into())),
         }
+    }
+    for rel in &empty_dirs {
+        let dest = dir.join(rel);
+        fs::create_dir_all(&dest).map_err(|e| Abort::Error(format!("Cannot create the folder {rel}: {e}")))?;
     }
     if !sender.send_feature(channel::FILES, Msg::Complete { id: t.id }.encode(), SEND_TIMEOUT) {
         return Err(lost());
@@ -1274,16 +1348,22 @@ fn open_part<'a>(slot: &'a mut Option<File>, path: &Path, written: u64) -> Resul
     Ok(slot.as_mut().unwrap())
 }
 
-/// Moves a verified partial file to its final name per the overwrite policy and marks it
-/// as downloaded. Returns `None` when the file was skipped.
-fn place_file(part: &Path, dir: &Path, name: &str, policy: tr::Overwrite) -> io::Result<Option<PathBuf>> {
+/// Moves a verified partial file to its final relative path per the overwrite policy,
+/// creating parent folders, and marks it as downloaded. Returns `None` when skipped.
+fn place_file(part: &Path, dir: &Path, rel: &str, policy: tr::Overwrite) -> io::Result<Option<PathBuf>> {
+    let (sub, name) = match rel.rsplit_once('/') {
+        Some((sub, name)) => (sub, name),
+        None => ("", rel),
+    };
+    let folder = if sub.is_empty() { dir.to_path_buf() } else { dir.join(sub) };
+    fs::create_dir_all(&folder)?;
     for _ in 0..8 {
-        let taken = |n: &str| dir.join(n).symlink_metadata().is_ok();
+        let taken = |n: &str| folder.join(n).symlink_metadata().is_ok();
         let Some(dest_name) = tr::destination_name(name, policy, taken) else {
             fs::remove_file(part)?;
             return Ok(None);
         };
-        let dest = dir.join(dest_name);
+        let dest = folder.join(dest_name);
         let moved =
             if policy == tr::Overwrite::Replace { fs::rename(part, &dest) } else { move_no_replace(part, &dest) };
         match moved {
@@ -1332,32 +1412,125 @@ fn remove_stale_parts(dir: &Path) {
 
 // ---------------------------------------------------------------- helpers
 
-/// Reads the size of each file to send. Folders are refused.
-fn stat_sources(paths: &[PathBuf]) -> Result<(Vec<FileEntry>, Vec<PathBuf>), String> {
+/// The files and empty folders below the selected paths, with the relative path each one
+/// gets on the receiving side. Links and junctions are skipped, so a send never leaves the
+/// selected tree or loops. Roots with the same name are numbered.
+fn collect_sources(paths: &[PathBuf]) -> Result<(Vec<FileEntry>, Vec<Option<PathBuf>>), String> {
     if paths.is_empty() {
-        return Err("Choose at least one file.".into());
+        return Err("Choose at least one file or folder.".into());
     }
-    if paths.len() > tr::MAX_FILES as usize {
-        return Err(format!("At most {} files can be sent at once.", tr::MAX_FILES));
-    }
-    let mut files = Vec::with_capacity(paths.len());
-    let mut total = 0u64;
-    for p in paths {
-        let name = p
+    let mut roots = HashSet::with_capacity(paths.len());
+    let mut out = Collect::default();
+    for path in paths {
+        let raw = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
-            .ok_or_else(|| format!("{} is not a file.", p.display()))?;
-        let meta = fs::metadata(p).map_err(|e| format!("Cannot read {name}: {e}"))?;
-        if meta.is_dir() {
-            return Err(format!("{name} is a folder; only files can be sent."));
+            .ok_or_else(|| format!("Cannot send {}: choose a folder inside a drive.", path.display()))?;
+        let meta = fs::metadata(path).map_err(|e| format!("Cannot read {raw}: {e}"))?;
+        if !meta.is_file() && !meta.is_dir() {
+            return Err(format!("{raw} is not a file or folder."));
         }
-        total = total.saturating_add(meta.len());
-        files.push(FileEntry { name, size: meta.len() });
+        let name = unique_root(&mut roots, &raw, meta.is_dir());
+        if meta.is_dir() {
+            if !walk_dir(path, &name, 0, &mut out)? {
+                out.push_dir(name)?;
+            }
+        } else {
+            if tr::path_units(&name) > tr::MAX_PATH_UNITS {
+                return Err(format!("The path of {name} is too long to send."));
+            }
+            out.push_file(name, path.clone(), meta.len())?;
+        }
     }
-    if total > tr::MAX_TOTAL_BYTES {
-        return Err("These files are too large to send at once.".into());
+    Ok((out.files, out.sources))
+}
+
+fn unique_root(seen: &mut HashSet<String>, name: &str, is_dir: bool) -> String {
+    let mut candidate = name.to_owned();
+    for n in 1.. {
+        if seen.insert(candidate.to_lowercase()) {
+            return candidate;
+        }
+        candidate = if is_dir { format!("{name} ({n})") } else { tr::numbered_name(name, n) };
     }
-    Ok((files, paths.to_vec()))
+    unreachable!()
+}
+
+/// Deepest folder tree that is still walked; protects against pathological input.
+const MAX_SEND_DEPTH: usize = 64;
+
+#[derive(Default)]
+struct Collect {
+    files: Vec<FileEntry>,
+    sources: Vec<Option<PathBuf>>,
+    total: u64,
+}
+
+impl Collect {
+    fn check_room(&self) -> Result<(), String> {
+        if self.files.len() >= tr::MAX_FILES as usize {
+            return Err(format!("At most {} items can be sent at once.", tr::MAX_FILES));
+        }
+        Ok(())
+    }
+
+    fn push_file(&mut self, path: String, source: PathBuf, size: u64) -> Result<(), String> {
+        self.check_room()?;
+        self.total = self.total.saturating_add(size);
+        if self.total > tr::MAX_TOTAL_BYTES {
+            return Err("These files are too large to send at once.".into());
+        }
+        self.files.push(FileEntry { path, size, is_dir: false });
+        self.sources.push(Some(source));
+        Ok(())
+    }
+
+    fn push_dir(&mut self, path: String) -> Result<(), String> {
+        self.check_room()?;
+        self.files.push(FileEntry { path, size: 0, is_dir: true });
+        self.sources.push(None);
+        Ok(())
+    }
+}
+
+/// Adds everything below `dir`; returns whether anything was added (so empty folders can
+/// be added as explicit entries).
+fn walk_dir(dir: &Path, rel: &str, depth: usize, out: &mut Collect) -> Result<bool, String> {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    if depth >= MAX_SEND_DEPTH {
+        return Err(format!("{rel} is nested too deeply to send."));
+    }
+    let mut entries: Vec<_> = fs::read_dir(dir)
+        .map_err(|e| format!("Cannot read the folder {}: {e}", dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Cannot read the folder {}: {e}", dir.display()))?;
+    entries.sort_by_key(|e| e.file_name());
+    let mut any = false;
+    for entry in entries {
+        let meta = entry.metadata().map_err(|e| format!("Cannot read {}: {e}", entry.path().display()))?;
+        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            log::debug!("skipping a link in a folder transfer: {}", entry.path().display());
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let child = format!("{rel}/{name}");
+        if tr::path_units(&child) > tr::MAX_PATH_UNITS {
+            return Err(format!("The path of {name} is too long to send."));
+        }
+        if meta.is_dir() {
+            if walk_dir(&entry.path(), &child, depth + 1, out)? {
+                any = true;
+            } else {
+                out.push_dir(child)?;
+                any = true;
+            }
+        } else if meta.is_file() {
+            out.push_file(child, entry.path(), meta.len())?;
+            any = true;
+        }
+    }
+    Ok(any)
 }
 
 fn new_id() -> u64 {
@@ -1401,22 +1574,24 @@ fn wide(p: &Path) -> Vec<u16> {
 pub fn resolve_download_dir(setting: &str, default: &Path) -> Result<PathBuf, String> {
     let setting = setting.trim();
     let dir = if setting.is_empty() { default.to_path_buf() } else { PathBuf::from(setting) };
+    resolve_dir(&dir)
+}
+
+/// Validates and creates a destination folder (the configured one or one the receiver
+/// picked for a single transfer). Returns the canonical (`\\?\`) form.
+pub fn resolve_dir(dir: &Path) -> Result<PathBuf, String> {
     let local = match dir.components().next() {
         Some(Component::Prefix(p)) => matches!(p.kind(), Prefix::Disk(_) | Prefix::VerbatimDisk(_)),
         _ => false,
     };
     if !local || !dir.is_absolute() {
-        return Err(format!(
-            "The download folder \"{}\" must be a full path on a drive of this computer.",
-            dir.display()
-        ));
+        return Err(format!("The folder \"{}\" must be a full path on a drive of this computer.", dir.display()));
     }
-    if is_network_drive(&dir) {
-        return Err(format!("The download folder \"{}\" is on a network drive.", dir.display()));
+    if is_network_drive(dir) {
+        return Err(format!("The folder \"{}\" is on a network drive.", dir.display()));
     }
-    fs::create_dir_all(&dir).map_err(|e| format!("Cannot create the download folder \"{}\": {e}", dir.display()))?;
-    let canonical =
-        fs::canonicalize(&dir).map_err(|e| format!("Cannot open the download folder \"{}\": {e}", dir.display()))?;
+    fs::create_dir_all(dir).map_err(|e| format!("Cannot create the folder \"{}\": {e}", dir.display()))?;
+    let canonical = fs::canonicalize(dir).map_err(|e| format!("Cannot open the folder \"{}\": {e}", dir.display()))?;
     if !canonical.is_dir() {
         return Err(format!("\"{}\" is not a folder.", dir.display()));
     }
@@ -1524,6 +1699,52 @@ mod tests {
         );
         assert!(free_space(&dir).unwrap() > 0);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn placing_files_creates_the_folder_tree() {
+        let dir = fs::canonicalize(temp_dir("place-tree")).unwrap();
+        let part = dir.join(tr::part_name("Photos/2024/a.txt", 1));
+        fs::write(&part, b"new").unwrap();
+        let saved = place_file(&part, &dir, "Photos/2024/a.txt", tr::Overwrite::Rename).unwrap().unwrap();
+        assert!(saved.ends_with(Path::new("Photos").join("2024").join("a.txt")));
+        assert_eq!(fs::read(&saved).unwrap(), b"new");
+        assert!(dir.join("Photos/2024").is_dir());
+        let zone = fs::read_to_string(format!("{}:Zone.Identifier", saved.display())).unwrap();
+        assert!(zone.contains("ZoneId=3"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn collecting_sources_walks_folders_and_keeps_empty_ones() {
+        let base = temp_dir("collect");
+        let photos = base.join("Photos");
+        fs::create_dir_all(photos.join("2024")).unwrap();
+        fs::create_dir_all(photos.join("empty")).unwrap();
+        fs::write(photos.join("cover.jpg"), b"cover").unwrap();
+        fs::write(photos.join("2024/a.png"), b"a").unwrap();
+        let empty = base.join("Empty");
+        fs::create_dir_all(&empty).unwrap();
+        let loose = base.join("loose.txt");
+        fs::write(&loose, b"loose").unwrap();
+
+        let (files, sources) = collect_sources(&[photos.clone(), empty.clone(), loose]).unwrap();
+        let entries: Vec<(&str, u64, bool)> = files.iter().map(|f| (f.path.as_str(), f.size, f.is_dir)).collect();
+        assert_eq!(
+            entries,
+            [
+                ("Photos/2024/a.png", 1, false),
+                ("Photos/cover.jpg", 5, false),
+                ("Photos/empty", 0, true),
+                ("Empty", 0, true),
+                ("loose.txt", 5, false),
+            ]
+        );
+        assert_eq!(sources[0].as_deref(), Some(photos.join("2024/a.png").as_path()));
+        assert_eq!(sources[1].as_deref(), Some(photos.join("cover.jpg").as_path()));
+        assert!(sources[2].is_none() && sources[3].is_none());
+        assert_eq!(sources[4].as_deref(), Some(base.join("loose.txt").as_path()));
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

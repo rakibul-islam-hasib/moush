@@ -7,7 +7,8 @@
 //! sender-chosen 64-bit transfer id:
 //!
 //! 1. S → R `Offer` parts: the file list (bare names and sizes), split across as many
-//!    messages as needed; parts arrive in order.
+//!    messages as needed; parts arrive in order. Folder transfers use `OfferV2` parts,
+//!    whose entries carry a relative path (`Photos/2024/a.jpg`) and a directory flag.
 //! 2. R → S `Accept` parts ending with `last = true` (a sparse list of files R skips or
 //!    already holds a prefix of), or `Reject`.
 //! 3. S → R `Data` chunks in file order with at most `window` bytes unacknowledged;
@@ -46,6 +47,8 @@ pub mod kind {
     pub const COMPLETE: u8 = 7;
     pub const CANCEL: u8 = 8;
     pub const ERROR: u8 = 9;
+    /// Offer whose entries carry relative paths and an empty-folder flag.
+    pub const OFFER_V2: u8 = 10;
 }
 
 /// Most files one offer may contain.
@@ -61,6 +64,11 @@ pub const SKIP: u64 = u64::MAX;
 /// Longest file name kept, in UTF-16 units (leaves room for " (n)" and the part suffix
 /// within the 255-unit NTFS limit).
 pub const MAX_NAME_UNITS: usize = 180;
+/// Longest relative path of one entry, in UTF-16 units. Long paths work because the
+/// receiver writes below a canonical (`\\?\`) folder.
+pub const MAX_PATH_UNITS: usize = 512;
+/// Longest encoded relative path: [`MAX_PATH_UNITS`] four-byte UTF-8 characters.
+pub const MAX_PATH_BYTES: usize = MAX_PATH_UNITS * 4;
 pub const PART_SUFFIX: &str = ".moushpart";
 const OFFER_HEADER: usize = 1 + 8 + 4 + 8 + 4 + 2;
 const ACCEPT_HEADER: usize = 1 + 8 + 1 + 2;
@@ -68,8 +76,19 @@ const RESUME_LEN: usize = 4 + 8 + 32;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileEntry {
-    pub name: String,
+    /// Path relative to the transfer root, `/`-separated. A single file's path is its
+    /// name; a folder transfer starts with the selected folder's name.
+    pub path: String,
     pub size: u64,
+    /// An empty folder to create on the receiving side. It carries no data.
+    pub is_dir: bool,
+}
+
+impl FileEntry {
+    /// The last path component, for display.
+    pub fn name(&self) -> &str {
+        self.path.rsplit('/').next().unwrap_or(&self.path)
+    }
 }
 
 /// A file the receiver skips (`offset == SKIP`) or already holds `offset` bytes of.
@@ -84,6 +103,7 @@ pub struct Resume {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Msg {
     Offer { id: u64, total_files: u32, total_bytes: u64, first: u32, files: Vec<FileEntry> },
+    OfferV2 { id: u64, total_files: u32, total_bytes: u64, first: u32, files: Vec<FileEntry> },
     Accept { id: u64, last: bool, resume: Vec<Resume> },
     Reject { id: u64, reason: String },
     Data { id: u64, index: u32, offset: u64, data: Vec<u8> },
@@ -98,6 +118,7 @@ impl Msg {
     pub fn id(&self) -> u64 {
         match self {
             Msg::Offer { id, .. }
+            | Msg::OfferV2 { id, .. }
             | Msg::Accept { id, .. }
             | Msg::Reject { id, .. }
             | Msg::Data { id, .. }
@@ -121,8 +142,20 @@ impl Msg {
                 wire::put_u32(&mut out, *first);
                 wire::put_u16(&mut out, files.len() as u16);
                 for f in files {
-                    wire::put_str8(&mut out, &f.name);
+                    wire::put_str8(&mut out, &f.path);
                     wire::put_u64(&mut out, f.size);
+                }
+            }
+            Msg::OfferV2 { id, total_files, total_bytes, first, files } => {
+                head(&mut out, kind::OFFER_V2, *id);
+                wire::put_u32(&mut out, *total_files);
+                wire::put_u64(&mut out, *total_bytes);
+                wire::put_u32(&mut out, *first);
+                wire::put_u16(&mut out, files.len() as u16);
+                for f in files {
+                    wire::put_bytes(&mut out, f.path.as_bytes());
+                    wire::put_u64(&mut out, f.size);
+                    wire::put_bool(&mut out, f.is_dir);
                 }
             }
             Msg::Accept { id, last, resume } => {
@@ -165,25 +198,41 @@ impl Msg {
                 let total_bytes = r.u64()?;
                 let first = r.u32()?;
                 let count = r.u16()? as u32;
-                if total_files == 0 || total_files > MAX_FILES {
-                    return Err(DecodeError::Invalid("file count"));
-                }
-                if total_bytes > MAX_TOTAL_BYTES {
-                    return Err(DecodeError::Invalid("total size"));
-                }
-                if count == 0 || first.checked_add(count).is_none_or(|end| end > total_files) {
-                    return Err(DecodeError::Invalid("offer part range"));
-                }
+                check_offer_header(total_files, total_bytes, first, count)?;
                 let mut files = Vec::with_capacity(count as usize);
                 for _ in 0..count {
-                    let name = r.str8()?;
+                    let path = r.str8()?;
                     let size = r.u64()?;
-                    if name.is_empty() || size > MAX_TOTAL_BYTES {
+                    if path.is_empty() || size > MAX_TOTAL_BYTES {
                         return Err(DecodeError::Invalid("file entry"));
                     }
-                    files.push(FileEntry { name, size });
+                    files.push(FileEntry { path, size, is_dir: false });
                 }
                 Msg::Offer { id, total_files, total_bytes, first, files }
+            }
+            kind::OFFER_V2 => {
+                let total_files = r.u32()?;
+                let total_bytes = r.u64()?;
+                let first = r.u32()?;
+                let count = r.u16()? as u32;
+                check_offer_header(total_files, total_bytes, first, count)?;
+                let mut files = Vec::with_capacity(count as usize);
+                for _ in 0..count {
+                    let raw = r.bytes(MAX_PATH_BYTES)?;
+                    let path = std::str::from_utf8(raw).map_err(|_| DecodeError::Invalid("path utf-8"))?;
+                    let size = r.u64()?;
+                    let is_dir = r.bool()?;
+                    if path.is_empty()
+                        || path.chars().any(char::is_control)
+                        || path_units(path) > MAX_PATH_UNITS
+                        || size > MAX_TOTAL_BYTES
+                        || (is_dir && size != 0)
+                    {
+                        return Err(DecodeError::Invalid("file entry"));
+                    }
+                    files.push(FileEntry { path: path.to_owned(), size, is_dir });
+                }
+                Msg::OfferV2 { id, total_files, total_bytes, first, files }
             }
             kind::ACCEPT => {
                 let last = r.bool()?;
@@ -238,6 +287,19 @@ fn head(out: &mut Vec<u8>, k: u8, id: u64) {
     wire::put_u64(out, id);
 }
 
+fn check_offer_header(total_files: u32, total_bytes: u64, first: u32, count: u32) -> Result<(), DecodeError> {
+    if total_files == 0 || total_files > MAX_FILES {
+        return Err(DecodeError::Invalid("file count"));
+    }
+    if total_bytes > MAX_TOTAL_BYTES {
+        return Err(DecodeError::Invalid("total size"));
+    }
+    if count == 0 || first.checked_add(count).is_none_or(|end| end > total_files) {
+        return Err(DecodeError::Invalid("offer part range"));
+    }
+    Ok(())
+}
+
 fn text(out: &mut Vec<u8>, k: u8, id: u64, reason: &str) {
     head(out, k, id);
     let clean: String = reason.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
@@ -255,25 +317,32 @@ pub fn encode_data(id: u64, index: u32, offset: u64, data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Splits a file list into `Offer` bodies that each fit [`MAX_FEATURE_BODY`]. Names are
-/// expected to be at most 255 bytes (longer ones are truncated by the encoding).
+/// Splits a file list into `Offer` bodies that each fit [`MAX_FEATURE_BODY`]. Plain file
+/// lists use the original `Offer` format; anything with a path separator, an empty folder
+/// or a name longer than 255 bytes uses `OfferV2` (`path`, `size`, `is_dir` per entry).
 pub fn offer_parts(id: u64, files: &[FileEntry]) -> Vec<Vec<u8>> {
     let total_files = files.len() as u32;
     let total_bytes = files.iter().map(|f| f.size).sum();
+    let v2 = files.iter().any(|f| f.is_dir || f.path.contains('/') || f.path.len() > 255);
     let mut parts = Vec::new();
     let mut first = 0usize;
     while first < files.len() {
         let mut len = OFFER_HEADER;
         let mut end = first;
         while end < files.len() && end - first < u16::MAX as usize {
-            let entry = 1 + files[end].name.len().min(255) + 8;
+            let entry = if v2 { 4 + files[end].path.len() + 8 + 1 } else { 1 + files[end].path.len().min(255) + 8 };
             if len + entry > MAX_FEATURE_BODY {
                 break;
             }
             len += entry;
             end += 1;
         }
-        let msg = Msg::Offer { id, total_files, total_bytes, first: first as u32, files: files[first..end].to_vec() };
+        let chunk = files[first..end].to_vec();
+        let msg = if v2 {
+            Msg::OfferV2 { id, total_files, total_bytes, first: first as u32, files: chunk }
+        } else {
+            Msg::Offer { id, total_files, total_bytes, first: first as u32, files: chunk }
+        };
         parts.push(msg.encode());
         first = end;
     }
@@ -597,9 +666,12 @@ fn is_shell_active(name: &str) -> bool {
 /// otherwise alias another name), renames reserved device names (`con.txt` →
 /// `_con.txt`) and limits the length while keeping the extension.
 pub fn sanitize_name(raw: &str) -> Option<String> {
-    let base = raw.rsplit(['/', '\\']).next().unwrap_or("");
-    let replaced: String =
-        base.chars().filter(|c| !invisible(*c)).map(|c| if forbidden(c) { '_' } else { c }).collect();
+    sanitize_component(raw.rsplit(['/', '\\']).next().unwrap_or(""))
+}
+
+/// Like [`sanitize_name`] for one component of a relative path (no separators are kept).
+fn sanitize_component(raw: &str) -> Option<String> {
+    let replaced: String = raw.chars().filter(|c| !invisible(*c)).map(|c| if forbidden(c) { '_' } else { c }).collect();
     let trimmed = replaced.trim_start_matches(' ').trim_end_matches(['.', ' ']);
     if trimmed.is_empty() {
         return None;
@@ -619,20 +691,46 @@ pub fn sanitize_name(raw: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// Validates a name from an offer. Names that try to leave the destination folder (path
-/// separators, `..`, drive letters, alternate data streams) refuse the whole offer;
-/// anything else is made safe with [`sanitize_name`].
-pub fn check_offered_name(raw: &str) -> Result<String, &'static str> {
-    if raw.contains(['/', '\\']) {
+/// Turns a relative path ("Photos/2024/a.jpg") into a safe path, sanitizing every
+/// component like a file name. Returns `None` when a component leaves nothing usable.
+pub fn sanitize_path(raw: &str) -> Option<String> {
+    let mut out = String::with_capacity(raw.len());
+    for part in raw.split('/') {
+        let name = sanitize_component(part)?;
+        if !out.is_empty() {
+            out.push('/');
+        }
+        out.push_str(&name);
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// Validates a relative path from an offer. Paths that try to leave the destination folder
+/// (backslashes, absolute paths, drive letters, alternate data streams, empty or `.`/`..`
+/// components) refuse the whole offer; anything else is made safe with [`sanitize_path`].
+pub fn check_offered_path(raw: &str) -> Result<String, &'static str> {
+    if raw.contains('\\') {
         return Err("a file name contains a folder path");
     }
     if raw.contains(':') {
         return Err("a file name contains a drive or stream name");
     }
-    if raw.trim_end_matches([' ', '.']).is_empty() {
-        return Err("a file name is not valid");
+    if raw.starts_with('/')
+        || raw.ends_with('/')
+        || raw.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("a file name contains a folder path");
     }
-    sanitize_name(raw).ok_or("a file name is not valid")
+    let path = sanitize_path(raw).ok_or("a file name is not valid")?;
+    if path_units(&path) > MAX_PATH_UNITS {
+        return Err("a file path is too long");
+    }
+    Ok(path)
+}
+
+/// Length of a relative path in UTF-16 units.
+pub fn path_units(s: &str) -> usize {
+    utf16_len(s)
 }
 
 /// "name (n).ext".
@@ -641,23 +739,91 @@ pub fn numbered_name(name: &str, n: u32) -> String {
     format!("{stem} ({n}){ext}")
 }
 
-/// Makes names unique within one transfer (case-insensitively, like NTFS), numbering
-/// later duplicates.
-pub fn dedupe_names(names: &mut [String]) {
-    let mut seen: HashSet<String> = HashSet::with_capacity(names.len());
-    for name in names.iter_mut() {
-        if seen.insert(name.to_lowercase()) {
+fn numbered_path(path: &str, n: u32) -> String {
+    match path.rsplit_once('/') {
+        Some((dir, name)) => format!("{dir}/{}", numbered_name(name, n)),
+        None => numbered_name(path, n),
+    }
+}
+
+/// Replaces the last component of a relative path.
+pub fn replace_name(path: &str, name: &str) -> String {
+    match path.rsplit_once('/') {
+        Some((dir, _)) => format!("{dir}/{name}"),
+        None => name.to_owned(),
+    }
+}
+
+/// Makes paths unique within one transfer (case-insensitively, like NTFS), numbering the
+/// last component of later duplicates.
+pub fn dedupe_paths(files: &mut [FileEntry]) {
+    let mut seen: HashSet<String> = HashSet::with_capacity(files.len());
+    for f in files.iter_mut() {
+        if seen.insert(f.path.to_lowercase()) {
             continue;
         }
-        let original = name.clone();
+        let original = f.path.clone();
         for n in 1.. {
-            let candidate = numbered_name(&original, n);
+            let candidate = numbered_path(&original, n);
             if seen.insert(candidate.to_lowercase()) {
-                *name = candidate;
+                f.path = candidate;
                 break;
             }
         }
     }
+}
+
+/// True when an entry is both a file and a folder, or a file sits where another entry needs
+/// a folder (which would make receiving impossible).
+fn has_path_conflict(files: &[FileEntry]) -> bool {
+    let mut file_paths = HashSet::new();
+    let mut dir_paths = HashSet::new();
+    for f in files {
+        if f.is_dir {
+            dir_paths.insert(f.path.to_lowercase());
+        } else {
+            file_paths.insert(f.path.to_lowercase());
+        }
+    }
+    if !file_paths.is_disjoint(&dir_paths) {
+        return true;
+    }
+    for f in files {
+        let lower = f.path.to_lowercase();
+        let mut prefix = String::new();
+        let mut parts = lower.split('/').peekable();
+        while let Some(part) = parts.next() {
+            if parts.peek().is_none() {
+                break;
+            }
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(part);
+            if file_paths.contains(&prefix) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Sanitizes and validates the entries of an offer before anything is accepted: every path
+/// is made safe, duplicates are numbered, and impossible file/folder layouts are refused.
+pub fn prepare_offer(files: &[FileEntry]) -> Result<Vec<FileEntry>, &'static str> {
+    let mut out = Vec::with_capacity(files.len());
+    for f in files {
+        let path = check_offered_path(&f.path)?;
+        if f.is_dir && f.size != 0 {
+            return Err("a folder entry has a size");
+        }
+        out.push(FileEntry { path, size: f.size, is_dir: f.is_dir });
+    }
+    dedupe_paths(&mut out);
+    if has_path_conflict(&out) {
+        return Err("an item is both a file and a folder");
+    }
+    Ok(out)
 }
 
 /// What to do when a received file's name already exists in the destination folder.
@@ -695,9 +861,15 @@ pub fn destination_name(name: &str, policy: Overwrite, taken: impl Fn(&str) -> b
     }
 }
 
-/// Name of the partial file a transfer writes `name` into.
-pub fn part_name(name: &str, id: u64) -> String {
-    format!("{name}.{:08x}{PART_SUFFIX}", (id ^ (id >> 32)) as u32)
+/// Name of the partial file a transfer writes `rel_path` into. The full relative path is
+/// hashed, so two files with the same name in different folders never share a part file.
+pub fn part_name(rel_path: &str, id: u64) -> String {
+    let name = rel_path.rsplit('/').next().unwrap_or(rel_path);
+    let mut hasher = Blake2s256::new();
+    hasher.update(id.to_le_bytes());
+    hasher.update(rel_path.as_bytes());
+    let tag = u64::from_le_bytes(hasher.finalize()[..8].try_into().unwrap());
+    format!("{name}.{tag:016x}{PART_SUFFIX}")
 }
 
 // ---------------------------------------------------------------- progress
@@ -738,7 +910,9 @@ mod tests {
     use super::*;
 
     fn files(n: usize, name_len: usize) -> Vec<FileEntry> {
-        (0..n).map(|i| FileEntry { name: format!("{i:05}{}", "x".repeat(name_len)), size: i as u64 * 10 }).collect()
+        (0..n)
+            .map(|i| FileEntry { path: format!("{i:05}{}", "x".repeat(name_len)), size: i as u64 * 10, is_dir: false })
+            .collect()
     }
 
     #[test]
@@ -749,7 +923,17 @@ mod tests {
                 total_files: 2,
                 total_bytes: 3,
                 first: 0,
-                files: vec![FileEntry { name: "a.txt".into(), size: 1 }],
+                files: vec![FileEntry { path: "a.txt".into(), size: 1, is_dir: false }],
+            },
+            Msg::OfferV2 {
+                id: 7,
+                total_files: 2,
+                total_bytes: 3,
+                first: 0,
+                files: vec![
+                    FileEntry { path: "Photos/2024/a.jpg".into(), size: 3, is_dir: false },
+                    FileEntry { path: "Photos/empty".into(), size: 0, is_dir: true },
+                ],
             },
             Msg::Accept { id: 7, last: true, resume: vec![Resume { index: 1, offset: 5, prefix: [9; 32] }] },
             Msg::Accept { id: 7, last: false, resume: vec![] },
@@ -777,12 +961,12 @@ mod tests {
 
     #[test]
     fn hostile_bodies_are_rejected_without_panicking() {
-        let good = Msg::Offer {
+        let good = Msg::OfferV2 {
             id: 1,
             total_files: 1,
             total_bytes: 5,
             first: 0,
-            files: vec![FileEntry { name: "a".into(), size: 5 }],
+            files: vec![FileEntry { path: "Photos/a".into(), size: 5, is_dir: false }],
         }
         .encode();
         // Every truncation and trailing garbage fail cleanly.
@@ -805,7 +989,15 @@ mod tests {
                 total_files: 1,
                 total_bytes: 0,
                 first: 0,
-                files: vec![FileEntry { name: String::new(), size: 0 }],
+                files: vec![FileEntry { path: String::new(), size: 0, is_dir: false }],
+            }
+            .encode(),
+            Msg::OfferV2 {
+                id: 1,
+                total_files: 1,
+                total_bytes: 0,
+                first: 0,
+                files: vec![FileEntry { path: "a".into(), size: 1, is_dir: true }],
             }
             .encode(),
             vec![99, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -856,18 +1048,42 @@ mod tests {
         let mut complete = false;
         for p in &parts {
             assert!(p.len() <= MAX_FEATURE_BODY);
-            let Msg::Offer { id, total_files, total_bytes, first, files } = Msg::decode(p).unwrap() else { panic!() };
+            let (id, total_files, total_bytes, first, files) = match Msg::decode(p).unwrap() {
+                Msg::Offer { id, total_files, total_bytes, first, files }
+                | Msg::OfferV2 { id, total_files, total_bytes, first, files } => {
+                    (id, total_files, total_bytes, first, files)
+                }
+                other => panic!("unexpected {other:?}"),
+            };
             let a = asm.get_or_insert_with(|| OfferAssembler::new(id, total_files, total_bytes));
             complete = a.push(total_files, total_bytes, first, files).unwrap();
         }
         assert!(complete);
         assert_eq!(asm.unwrap().into_files(), list);
 
+        // Folder lists use OfferV2 and split the same way.
+        let tree: Vec<FileEntry> = (0..3000)
+            .map(|i| FileEntry { path: format!("Photos/{i:05}{}", "x".repeat(180)), size: 10, is_dir: false })
+            .collect();
+        let parts = offer_parts(43, &tree);
+        assert!(parts.len() > 10);
+        let mut asm: Option<OfferAssembler> = None;
+        let mut complete = false;
+        for p in &parts {
+            assert!(p.len() <= MAX_FEATURE_BODY);
+            let Msg::OfferV2 { id, total_files, total_bytes, first, files } = Msg::decode(p).unwrap() else { panic!() };
+            let a = asm.get_or_insert_with(|| OfferAssembler::new(id, total_files, total_bytes));
+            complete = a.push(total_files, total_bytes, first, files).unwrap();
+        }
+        assert!(complete);
+        assert_eq!(asm.unwrap().into_files(), tree);
+
         let resume: Vec<Resume> = (0..2000).map(|i| Resume { index: i, offset: 1, prefix: [1; 32] }).collect();
         let parts = accept_parts(42, &resume);
         assert!(parts.len() > 1);
         let mut acc = AcceptAssembler::new(2000);
-        let entries: Vec<FileEntry> = (0..2000).map(|i| FileEntry { name: i.to_string(), size: 10 }).collect();
+        let entries: Vec<FileEntry> =
+            (0..2000).map(|i| FileEntry { path: i.to_string(), size: 10, is_dir: false }).collect();
         let mut last = false;
         for p in &parts {
             let Msg::Accept { last: l, resume, .. } = Msg::decode(p).unwrap() else { panic!() };
@@ -890,7 +1106,10 @@ mod tests {
 
     #[test]
     fn accept_assembly_validates_entries() {
-        let entries = vec![FileEntry { name: "a".into(), size: 10 }, FileEntry { name: "b".into(), size: 10 }];
+        let entries = vec![
+            FileEntry { path: "a".into(), size: 10, is_dir: false },
+            FileEntry { path: "b".into(), size: 10, is_dir: false },
+        ];
         let r = |index, offset| Resume { index, offset, prefix: [0; 32] };
         assert!(AcceptAssembler::new(2).push(true, &[r(2, 0)], &entries).is_err(), "out of range");
         assert!(AcceptAssembler::new(2).push(true, &[r(0, 11)], &entries).is_err(), "beyond the end");
@@ -940,27 +1159,72 @@ mod tests {
         assert!(utf16_len(&out) <= MAX_NAME_UNITS);
         assert!(out.ends_with(".docx"));
         assert!(utf16_len(&part_name(&numbered_name(&out, 9999), u64::MAX)) <= 255);
+
+        // Relative paths keep their folders, sanitize every component, and refuse
+        // anything that could escape the destination.
+        assert_eq!(sanitize_path("Photos/2024/a.jpg").as_deref(), Some("Photos/2024/a.jpg"));
+        assert_eq!(sanitize_path("a b/con.txt/sub.url").as_deref(), Some("a b/_con.txt/sub.url.txt"));
+        assert_eq!(sanitize_path("a//b"), None);
+        assert_eq!(sanitize_path("a/../b"), None);
+        assert_eq!(sanitize_path("a/."), None);
+        assert_eq!(sanitize_path("/a"), None);
+        assert_eq!(sanitize_path("a/"), None);
     }
 
     #[test]
-    fn offered_names_with_paths_refuse_the_offer() {
-        assert!(check_offered_name(r"..\..\x").is_err());
-        assert!(check_offered_name("../x").is_err());
-        assert!(check_offered_name(r"C:\x").is_err());
-        assert!(check_offered_name("C:x").is_err());
-        assert!(check_offered_name("a:b").is_err());
-        assert!(check_offered_name("..").is_err());
-        assert!(check_offered_name(". .").is_err());
-        assert_eq!(check_offered_name("con.txt").unwrap(), "_con.txt");
-        assert_eq!(check_offered_name("trailing.").unwrap(), "trailing");
-        assert_eq!(check_offered_name("ok.txt").unwrap(), "ok.txt");
+    fn offered_paths_with_traversal_refuse_the_offer() {
+        assert!(check_offered_path(r"..\..\x").is_err());
+        assert!(check_offered_path("../x").is_err());
+        assert!(check_offered_path("Photos/../../x").is_err());
+        assert!(check_offered_path(r"C:\x").is_err());
+        assert!(check_offered_path("C:x").is_err());
+        assert!(check_offered_path("a:b").is_err());
+        assert!(check_offered_path("..").is_err());
+        assert!(check_offered_path(". .").is_err());
+        assert!(check_offered_path("Photos//a").is_err());
+        assert!(check_offered_path("/etc/passwd").is_err());
+        assert!(check_offered_path("Photos/").is_err());
+        let long = vec!["x".repeat(MAX_NAME_UNITS); 4].join("/");
+        assert!(check_offered_path(&long).is_err(), "{} units", path_units(&long));
+        assert_eq!(check_offered_path("con.txt").unwrap(), "_con.txt");
+        assert_eq!(check_offered_path("trailing.").unwrap(), "trailing");
+        assert_eq!(check_offered_path("ok.txt").unwrap(), "ok.txt");
+        assert_eq!(check_offered_path("Photos/con.txt/ok.md").unwrap(), "Photos/_con.txt/ok.md");
+        assert_eq!(check_offered_path("Photos/2024/x.jpg").unwrap(), "Photos/2024/x.jpg");
     }
 
     #[test]
-    fn duplicate_names_in_one_transfer_are_numbered() {
-        let mut names = vec!["a.txt".to_string(), "A.TXT".into(), "a (1).txt".into(), "b".into()];
-        dedupe_names(&mut names);
-        assert_eq!(names, ["a.txt", "A (1).TXT", "a (1) (1).txt", "b"]);
+    fn duplicate_paths_in_one_transfer_are_numbered() {
+        let mut files = vec![
+            FileEntry { path: "a.txt".into(), size: 1, is_dir: false },
+            FileEntry { path: "A.TXT".into(), size: 1, is_dir: false },
+            FileEntry { path: "a (1).txt".into(), size: 1, is_dir: false },
+            FileEntry { path: "dir/a.txt".into(), size: 1, is_dir: false },
+            FileEntry { path: "dir/A.TXT".into(), size: 1, is_dir: false },
+            FileEntry { path: "b".into(), size: 1, is_dir: false },
+        ];
+        dedupe_paths(&mut files);
+        let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["a.txt", "A (1).TXT", "a (1) (1).txt", "dir/a.txt", "dir/A (1).TXT", "b"]);
+    }
+
+    #[test]
+    fn offer_preparation_sanitizes_and_rejects_impossible_trees() {
+        let f = |path: &str, size, is_dir| FileEntry { path: path.into(), size, is_dir };
+        let prepared =
+            prepare_offer(&[f("Photos", 0, true), f("Photos/a b.txt", 3, false), f("photos/../evil", 1, false)]);
+        assert_eq!(prepared, Err("a file name contains a folder path"));
+
+        let prepared = prepare_offer(&[f("Photos", 0, true), f("Photos/a.txt", 3, false)]).unwrap();
+        assert_eq!(prepared[0].path, "Photos");
+        assert_eq!(prepared[1].path, "Photos/a.txt");
+
+        assert_eq!(prepare_offer(&[f("a", 1, false), f("a/b", 1, false)]), Err("an item is both a file and a folder"));
+        let mixed = prepare_offer(&[f("a", 1, false), f("A", 0, true)]).unwrap();
+        assert_eq!(mixed[1].path, "A (1)");
+        assert_eq!(prepare_offer(&[f("a", 1, true)]), Err("a folder entry has a size"));
+        assert_eq!(prepare_offer(&[f("a/b", 0, true), f("a/B", 0, true)]).unwrap()[1].path, "a/B (1)");
+        assert!(prepare_offer(&[f("Photos/2024/a.jpg", 5, false)]).is_ok());
     }
 
     #[test]

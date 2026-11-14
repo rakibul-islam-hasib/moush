@@ -387,7 +387,7 @@ function TransferCard({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
       id="feature-transfer"
       icon="transfer"
       title="File transfer"
-      description={t.enabled ? "Send files by dragging them onto Moush or from the Transfers page" : "Off — files can't be sent or received"}
+      description={t.enabled ? "Send files and folders by dragging them onto Moush or from the Transfers page" : "Off — files can't be sent or received"}
       open={open}
       onOpenChange={onOpenChange}
       headerControl={(ids) => <Toggle checked={t.enabled} onChange={(v) => transfer({ enabled: v })} ids={ids} />}
