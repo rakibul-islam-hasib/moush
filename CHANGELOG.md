@@ -6,6 +6,18 @@ All notable changes to Moush are documented in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Android app** (`mobile/`, Kotlin and Jetpack Compose): touchpad with gestures and air mouse,
+  live keyboard, media and shortcut deck, remote screen viewer with display picker, zoom, aim
+  loupe and click-through, and file and folder sharing from the phone (also via Android Share).
+- Phone remotes: a new `Remote` peer role that pairs like any device and sends relative and
+  absolute pointer input, wheel and keys, which the host injects. Permission "Screen viewing"
+  per device.
+- Screen channel (`moush-core::screen`, `moush-engine::screen`): JPEG frames of one display or
+  a zoomed crop, flow-controlled with acknowledgements; unchanged pictures cost nothing.
+- `moush-cli host --receive-dir <folder>` accepts files from paired devices without the GUI.
+
 ## [0.1.0] - 2026-10-26
 
 First public release. Moush is Windows-only and still 0.x software; the wire protocol,

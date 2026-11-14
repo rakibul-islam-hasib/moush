@@ -25,3 +25,15 @@ desktop.ini
 # Launch film working directory (large renders, caches, narration key)
 brag-output/
 .hyperframes/
+
+# Android app
+mobile/.gradle/
+mobile/build/
+mobile/app/build/
+mobile/local.properties
+mobile/.idea/
+mobile/*.iml
+mobile/.kotlin/
+
+# Agent tooling
+.agents/

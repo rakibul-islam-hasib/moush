@@ -8,5 +8,6 @@ pub mod dpi;
 pub mod focus;
 pub mod inject;
 pub mod monitors;
+pub mod screen_grab;
 pub mod system;
 pub mod toast;

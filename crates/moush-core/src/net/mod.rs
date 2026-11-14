@@ -524,6 +524,7 @@ pub struct PeerInfo {
     pub id: String,
     pub name: String,
     pub addr: SocketAddr,
+    pub role: PeerRole,
 }
 
 pub(crate) struct AuthCtx<'a> {
@@ -614,7 +615,10 @@ pub(crate) fn hello_and_authorize(
         Message::Bye { reason } => return Err(AuthError::RejectedByPeer(reason)),
         other => return Err(AuthError::Incompatible(format!("unexpected {other:?} before hello"))),
     };
-    let expected = if ctx.my_role == PeerRole::Host { PeerRole::Client } else { PeerRole::Host };
+    let acceptable = |r: PeerRole| match ctx.my_role {
+        PeerRole::Host => matches!(r, PeerRole::Client | PeerRole::Remote),
+        _ => r == PeerRole::Host,
+    };
     let bye = |w: &Arc<Mutex<MsgWriter>>, reason: &str| {
         let _ = w.lock().unwrap().send(&[Message::Bye { reason: reason.to_owned() }]);
     };
@@ -625,15 +629,16 @@ pub(crate) fn hello_and_authorize(
         bye(&w, &msg);
         return Err(AuthError::Incompatible(msg));
     }
-    if role != expected {
+    if !acceptable(role) {
         let msg = match role {
             PeerRole::Host => "both computers are set up as host; set one of them to client".to_owned(),
             PeerRole::Client => "both computers are set up as client; set one of them to host".to_owned(),
+            PeerRole::Remote => "a phone remote can only connect to a computer set up as host".to_owned(),
         };
         bye(&w, &msg);
         return Err(AuthError::Incompatible(msg));
     }
-    let peer = PeerInfo { public: ch_remote, id: device_id(&ch_remote), name, addr };
+    let peer = PeerInfo { public: ch_remote, id: device_id(&ch_remote), name, addr, role };
     if let Some(d) = ctx.deadline {
         d.disarm();
     }
@@ -657,7 +662,11 @@ pub(crate) fn hello_and_authorize(
                 peer_id: peer.id.clone(),
                 peer_name: peer.name.clone(),
                 peer_address: addr.to_string(),
-                peer_role: if role == PeerRole::Host { TrustRole::Host } else { TrustRole::Client },
+                peer_role: match role {
+                    PeerRole::Host => TrustRole::Host,
+                    PeerRole::Client => TrustRole::Client,
+                    PeerRole::Remote => TrustRole::Remote,
+                },
                 code: ctx.code.clone(),
                 needs_my_approval: !i_trust,
                 expires_at: 0,

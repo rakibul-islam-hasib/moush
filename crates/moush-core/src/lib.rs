@@ -10,6 +10,7 @@
 //! * [`trust`], [`pairing`] – paired devices and pending pairing prompts.
 //! * [`features`], [`flow`] – optional features (clipboard, files) and their flow control.
 //! * [`clipboard`] – clipboard sync and text sharing: clip model, wire format, sync rules.
+//! * [`screen`] – remote screen viewing for a paired phone: wire format.
 //! * [`transfer`] – file transfer wire format, name sanitisation and resume logic.
 
 pub mod clipboard;
@@ -24,6 +25,7 @@ pub mod net;
 pub mod pairing;
 pub mod protocol;
 pub mod router;
+pub mod screen;
 pub mod stats;
 pub mod transfer;
 pub mod trust;

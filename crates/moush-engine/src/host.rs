@@ -13,9 +13,10 @@ use std::thread::{self, JoinHandle};
 
 use moush_core::crypto::Identity;
 use moush_core::discovery::{Announce, Responder};
+use moush_core::inject::{InjectState, Injector as _};
 use moush_core::net::host::{ClientHandle, ClientInfo, HostEvents, HostServer};
 use moush_core::pairing::PairingBroker;
-use moush_core::protocol::MonitorDesc;
+use moush_core::protocol::{Message, MonitorDesc, key_flags};
 use moush_core::router::RouterSettings;
 use moush_core::stats::{LatencySummary, Stats};
 use moush_core::trust::TrustStore;
@@ -63,6 +64,9 @@ enum Ctl {
 struct Events {
     ctl: Mutex<Sender<Ctl>>,
     hub: Arc<FeatureHub>,
+    /// Injects input from phone remotes. Held keys and buttons are released when the
+    /// remote disconnects, so a dropped connection never leaves anything stuck.
+    remote: Mutex<InjectState<crate::win::inject::SendInputInjector>>,
 }
 
 impl Events {
@@ -89,6 +93,32 @@ impl HostEvents for Events {
     }
     fn client_feature(&self, id: &str, conn_no: u64, channel: u8, body: Vec<u8>) {
         self.hub.on_feature(id, conn_no, channel, body);
+    }
+    fn remote_connected(&self, id: &str, name: &str, conn_no: u64, sender: moush_core::net::PeerSender) {
+        self.hub.peer_up(id, name, conn_no, sender);
+        // `Enter` marks the injector active; the position is irrelevant for relative input.
+        let mut r = self.remote.lock().unwrap();
+        if !r.active() {
+            r.apply(&Message::ReleaseAll);
+            r.set_active(true);
+        }
+    }
+    fn remote_input(&self, _id: &str, msg: &Message) {
+        let mut r = self.remote.lock().unwrap();
+        match *msg {
+            Message::MouseRel { dx, dy } => {
+                r.injector().move_rel(dx as i32, dy as i32);
+            }
+            Message::Key { flags, .. } if flags & key_flags::ALL != flags => {}
+            _ => {
+                r.apply(msg);
+            }
+        }
+    }
+    fn remote_disconnected(&self, id: &str, conn_no: u64) {
+        self.hub.peer_down(id, conn_no);
+        let mut r = self.remote.lock().unwrap();
+        r.apply(&Message::Leave);
     }
 }
 
@@ -135,7 +165,11 @@ impl HostEngine {
     ) -> io::Result<Self> {
         make_thread_dpi_aware();
         let (tx, rx) = mpsc::channel();
-        let events = Arc::new(Events { ctl: Mutex::new(tx.clone()), hub });
+        let events = Arc::new(Events {
+            ctl: Mutex::new(tx.clone()),
+            hub,
+            remote: Mutex::new(InjectState::new(crate::win::inject::SendInputInjector::new())),
+        });
         let mut store = LayoutStore::load(opts.layout_path.clone());
         // Drop layout entries for devices that are no longer paired.
         let trusted: Vec<String> = trust.list().into_iter().map(|p| p.id).collect();
@@ -149,6 +183,8 @@ impl HostEngine {
         }
         let (layout, views) = layout::build(&host_monitors, &[], &store);
 
+        // Phones that paired as remotes may watch this screen (per-device permission).
+        crate::screen::ScreenService::new(trust.clone()).attach(&events.hub);
         let capture = Capture::start(layout, opts.router, stats.clone(), events.clone())?;
         let server = match HostServer::start(
             SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, opts.port),

@@ -59,6 +59,12 @@ pub trait HostEvents: Send + Sync + 'static {
     fn client_capabilities(&self, _id: &str, _conn_no: u64, _features: u32) {}
     /// Feature traffic from the client (runs on its reader thread).
     fn client_feature(&self, _id: &str, _conn_no: u64, _channel: u8, _body: Vec<u8>) {}
+    /// A phone remote finished pairing and connected.
+    fn remote_connected(&self, _id: &str, _name: &str, _conn_no: u64, _sender: PeerSender) {}
+    /// Input from a phone remote (relative moves, buttons, wheel, keys, release-all).
+    fn remote_input(&self, _id: &str, _msg: &Message) {}
+    /// The phone remote disconnected: release everything it held.
+    fn remote_disconnected(&self, _id: &str, _conn_no: u64) {}
 }
 
 #[derive(Clone, Debug)]
@@ -303,25 +309,29 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
         };
         let (peer, mut w, newly) = hello_and_authorize(&mut r, w, remote, addr, &auth).map_err(|e| e.to_string())?;
         if newly {
-            ctx.trust
-                .add(&peer.public, &peer.name, TrustRole::Client, Some(addr.to_string()))
-                .map_err(|e| e.to_string())?;
+            let role = if peer.role == PeerRole::Remote { TrustRole::Remote } else { TrustRole::Client };
+            ctx.trust.add(&peer.public, &peer.name, role, Some(addr.to_string())).map_err(|e| e.to_string())?;
             log::info!("paired with {} ({})", peer.name, peer.id);
         } else {
             let _ = ctx.trust.touch(&peer.id, &peer.name, Some(addr.to_string()));
         }
         // The client describes its monitors right after authorization.
         stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT)).map_err(|e| e.to_string())?;
-        let screens = loop {
-            match r.next_msg().map_err(|e| format!("waiting for screen info: {e}"))? {
-                Message::Screens { monitors } => break monitors,
-                Message::Ping { .. } | Message::Pong { .. } => continue,
-                other => return Err(format!("unexpected {other:?} instead of screen info")),
+        let screens = if peer.role == PeerRole::Remote {
+            // A phone has no screens to report.
+            Vec::new()
+        } else {
+            loop {
+                match r.next_msg().map_err(|e| format!("waiting for screen info: {e}"))? {
+                    Message::Screens { monitors } => break monitors,
+                    Message::Ping { .. } | Message::Pong { .. } => continue,
+                    other => return Err(format!("unexpected {other:?} instead of screen info")),
+                }
             }
         };
         stream.set_read_timeout(None).map_err(|e| e.to_string())?;
         stream.set_write_timeout(Some(WRITE_TIMEOUT)).map_err(|e| e.to_string())?;
-        let full = {
+        let full = peer.role != PeerRole::Remote && {
             let clients = ctx.clients.lock().unwrap();
             clients.len() >= MAX_CLIENTS && !clients.contains_key(&peer.id)
         };
@@ -360,6 +370,17 @@ fn serve(mut stream: TcpStream, addr: SocketAddr, ctx: Arc<Ctx>) {
     };
     if writer.is_err() {
         log::error!("cannot spawn writer thread");
+        return;
+    }
+    if peer.role == PeerRole::Remote {
+        let conn_no = NEXT_CONN.fetch_add(1, Ordering::SeqCst);
+        log::info!("remote {} connected from {addr}", peer.name);
+        // Feature traffic (files) may follow at once: register before the reader starts.
+        ctx.events.remote_connected(&peer.id, &peer.name, conn_no, PeerSender::new(tx.clone(), gate, shared.clone()));
+        let reason = read_loop(&mut r, &peer, conn_no, &shared, &tx, &ctx);
+        shared.close();
+        ctx.events.remote_disconnected(&peer.id, conn_no);
+        log::info!("remote {} disconnected: {reason}", peer.name);
         return;
     }
     let conn_no = NEXT_CONN.fetch_add(1, Ordering::SeqCst);
@@ -440,6 +461,16 @@ fn read_loop(
                 Message::Bye { reason } => return format!("client said goodbye: {reason}"),
                 Message::Capabilities { features } => ctx.events.client_capabilities(&peer.id, conn_no, features),
                 Message::Feature { channel, body } => ctx.events.client_feature(&peer.id, conn_no, channel, body),
+                m @ (Message::MouseRel { .. }
+                | Message::MouseMove { .. }
+                | Message::MouseButton { .. }
+                | Message::Wheel { .. }
+                | Message::Key { .. }
+                | Message::ReleaseAll)
+                    if peer.role == PeerRole::Remote =>
+                {
+                    ctx.events.remote_input(&peer.id, &m);
+                }
                 other => {
                     // A client never sends input; anything else is a protocol violation.
                     log::warn!("{} sent unexpected {:?}; disconnecting", peer.name, other);

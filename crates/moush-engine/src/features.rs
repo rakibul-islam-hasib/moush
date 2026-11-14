@@ -251,6 +251,7 @@ fn channel_caps(channel: u8) -> Option<u32> {
     match channel {
         ch::CLIPBOARD => Some(cap::CLIPBOARD | cap::TEXT_SHARE),
         ch::FILES => Some(cap::FILES),
+        ch::SCREEN => Some(cap::SCREEN),
         _ => None,
     }
 }

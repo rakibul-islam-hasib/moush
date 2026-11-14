@@ -11,6 +11,10 @@ use crate::protocol::{Message, MouseButton, WheelAxis, key_flags};
 /// (e.g. UIPI blocked injection into an elevated window).
 pub trait Injector: Send {
     fn move_abs(&mut self, x: i32, y: i32) -> bool;
+    /// Relative pointer movement (remote touchpad). Platforms without it may ignore it.
+    fn move_rel(&mut self, _dx: i32, _dy: i32) -> bool {
+        false
+    }
     fn button(&mut self, button: MouseButton, down: bool) -> bool;
     fn wheel(&mut self, axis: WheelAxis, delta: i16) -> bool;
     /// `by_vk`: inject the virtual-key code instead of the scan code.
@@ -37,6 +41,11 @@ impl<I: Injector> InjectState<I> {
 
     pub fn active(&self) -> bool {
         self.active
+    }
+
+    /// Marks the state as accepting input without a position (relative remotes).
+    pub fn set_active(&mut self, active: bool) {
+        self.active = active;
     }
 
     pub fn injector(&mut self) -> &mut I {

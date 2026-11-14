@@ -14,6 +14,7 @@ moush-core.workspace = true
 log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+jpeg-encoder = "0.7"
 
 [target.'cfg(windows)'.dependencies.windows]
 workspace = true

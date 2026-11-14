@@ -3,6 +3,8 @@
 // Keep the two files in sync.
 
 export type Role = "host" | "client";
+/** Role of a paired device: a phone remote is neither host nor client. */
+export type PeerRole = Role | "remote";
 
 /** A physical monitor. Coordinates are physical pixels in that computer's virtual desktop. */
 export interface MonitorInfo {
@@ -105,7 +107,7 @@ export interface PairingRequest {
   peerId: string;
   peerName: string;
   peerAddress: string;
-  peerRole: Role;
+  peerRole: PeerRole;
   code: string; // 6-digit verification code; identical on both computers
   needsMyApproval: boolean; // false = we already trust the peer, waiting on the other side
   expiresAt: number; // unix ms
@@ -114,7 +116,7 @@ export interface PairingRequest {
 export interface TrustedDevice {
   id: string;
   name: string;
-  role: Role; // the role the peer had when paired
+  role: PeerRole; // the role the peer had when paired
   fingerprint: string; // "a1b2-c3d4-e5f6-a7b8"
   lastAddress: string | null;
   pairedAt: number;
@@ -128,6 +130,7 @@ export interface DevicePolicy {
   clipboard: boolean;
   files: boolean;
   textShare: boolean;
+  screen: boolean; // a paired phone may watch this screen
 }
 
 export interface PlatformInfo {
@@ -177,8 +180,10 @@ export interface ClipboardStatus {
 }
 
 export interface TransferFile {
-  name: string;
+  name: string; // last path component
+  path: string; // relative path inside the transfer, e.g. "Photos/2024/a.jpg"
   size: number;
+  isDir: boolean; // an empty folder inside a folder transfer
 }
 
 export type TransferState = "pending" | "active" | "done" | "failed" | "cancelled" | "rejected";

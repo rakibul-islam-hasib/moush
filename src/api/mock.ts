@@ -64,6 +64,7 @@ interface RemoteCaps {
   clipboard: boolean;
   files: boolean;
   textShare: boolean;
+  screen?: boolean;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -248,11 +249,11 @@ export function createMockBackend(): Backend {
   ];
   /** What each remote computer allows (its own settings). MEDIA-PC has file transfer turned off. */
   const remote: Record<string, RemoteCaps> = {
-    [LAPTOP_ID]: { clipboard: true, files: true, textShare: true },
-    [MEDIA_ID]: { clipboard: true, files: false, textShare: true },
-    [LIVINGROOM_ID]: { clipboard: true, files: true, textShare: true },
-    [STUDIO_ID]: { clipboard: true, files: true, textShare: true },
-    [OFFICE_ID]: { clipboard: true, files: true, textShare: true },
+    [LAPTOP_ID]: { clipboard: true, files: true, textShare: true, screen: true },
+    [MEDIA_ID]: { clipboard: true, files: false, textShare: true, screen: true },
+    [LIVINGROOM_ID]: { clipboard: true, files: true, textShare: true, screen: true },
+    [STUDIO_ID]: { clipboard: true, files: true, textShare: true, screen: true },
+    [OFFICE_ID]: { clipboard: true, files: true, textShare: true, screen: true },
   };
 
   // ---- client side
@@ -286,7 +287,7 @@ export function createMockBackend(): Backend {
   ];
 
   // ---- shared
-  const policy = (p?: Partial<DevicePolicy>): DevicePolicy => ({ clipboard: true, files: true, textShare: true, ...p });
+  const policy = (p?: Partial<DevicePolicy>): DevicePolicy => ({ clipboard: true, files: true, textShare: true, screen: true, ...p });
   let pairing: PairingRequest[] = [];
   let trusted: Omit<TrustedDevice, "online">[] = thisIsLaptop
     ? [
@@ -360,6 +361,12 @@ export function createMockBackend(): Backend {
     error: null,
   };
   const DOWNLOADS = "C:\\Users\\you\\Downloads\\Moush";
+  const tf = (path: string, size: number, isDir = false): TransferFile => ({
+    name: path.split("/").pop() || path,
+    path,
+    size,
+    isDir,
+  });
 
   const transfer = (t: Partial<TransferView> & Pick<TransferView, "direction" | "files" | "state">): TransferView => {
     const total = t.files.reduce((n, f) => n + f.size, 0);
@@ -383,16 +390,18 @@ export function createMockBackend(): Backend {
       direction: "receive",
       state: "pending",
       files: [
-        { name: "Invoice-2026-10.pdf", size: 412_331 },
-        { name: "Screenshot 2026-10-19 093112.png", size: 1_842_112 },
-        { name: "notes.md", size: 6_120 },
+        tf("Taxes-2026/Invoice-2026-10.pdf", 412_331),
+        tf("Taxes-2026/Screenshot 2026-10-19 093112.png", 1_842_112),
+        tf("Taxes-2026/notes.md", 6_120),
+        tf("Taxes-2026/archive", 0, true),
       ],
+      destination: DOWNLOADS,
       startedAt: Date.now() - 20_000,
     }),
     transfer({
       direction: "send",
       state: "active",
-      files: [{ name: "Project-Q3-recording.mp4", size: 1_480 * MB }],
+      files: [tf("Project-Q3-recording.mp4", 1_480 * MB)],
       doneBytes: 560 * MB,
       bytesPerSec: 46 * MB,
       startedAt: Date.now() - 14_000,
@@ -400,7 +409,7 @@ export function createMockBackend(): Backend {
     transfer({
       direction: "receive",
       state: "done",
-      files: [{ name: "holiday-photos.zip", size: 228 * MB }],
+      files: [tf("holiday-photos.zip", 228 * MB)],
       doneBytes: 228 * MB,
       startedAt: Date.now() - 50 * 60_000,
       finishedAt: Date.now() - 49 * 60_000,
@@ -409,10 +418,7 @@ export function createMockBackend(): Backend {
     transfer({
       direction: "send",
       state: "failed",
-      files: [
-        { name: "design-assets.fig", size: 84 * MB },
-        { name: "brand-guide.pdf", size: 12 * MB },
-      ],
+      files: [tf("design-assets.fig", 84 * MB), tf("brand-guide.pdf", 12 * MB)],
       doneBytes: 31 * MB,
       error: "The connection was lost.",
       canRetry: true,
@@ -422,7 +428,7 @@ export function createMockBackend(): Backend {
     transfer({
       direction: "receive",
       state: "rejected",
-      files: [{ name: "setup.exe", size: 88 * MB }],
+      files: [tf("setup.exe", 88 * MB)],
       startedAt: Date.now() - 26 * 3_600_000,
       finishedAt: Date.now() - 26 * 3_600_000,
     }),
@@ -523,7 +529,7 @@ export function createMockBackend(): Backend {
   function featurePeers(): FeaturePeer[] {
     return connectedPeers().map(({ id, name }) => {
       const pol = policyOf(id);
-      const r = remote[id] ?? { clipboard: true, files: true, textShare: true };
+      const r = remote[id] ?? { clipboard: true, files: true, textShare: true, screen: true };
       return {
         id,
         name,
@@ -695,7 +701,7 @@ export function createMockBackend(): Backend {
           bytesPerSec: 0,
           state: "done",
           finishedAt: Date.now(),
-          destination: t.direction === "receive" ? settings.transfer.downloadDir || DOWNLOADS : null,
+          destination: t.direction === "receive" ? (t.destination ?? (settings.transfer.downloadDir || DOWNLOADS)) : null,
         };
       }
       return { ...t, doneBytes: done, bytesPerSec: speed };
@@ -1042,15 +1048,23 @@ export function createMockBackend(): Backend {
     async sendFiles(peerId, paths) {
       await sleep(150);
       if (!settings.transfer.enabled) fail("File transfer is turned off in Features.");
-      if (paths.length === 0) fail("Choose at least one file.");
+      if (paths.length === 0) fail("Choose at least one file or folder.");
       const [target] = findPeerForFeature(peerId, "files", "File transfer");
-      const files: TransferFile[] = paths.map((p) => {
+      const files: TransferFile[] = paths.flatMap((p) => {
         const name = p.split(/[\\/]/).pop() || p;
-        return { name, size: sizeForName(name) };
+        // The preview cannot inspect the disk: a name without an extension is a folder.
+        if (!/\.[^\\/.]{1,12}$/.test(name)) {
+          return [
+            tf(`${name}/cover.jpg`, 2_400_000),
+            tf(`${name}/notes.txt`, 1_200),
+            tf(`${name}/screenshots`, 0, true),
+          ];
+        }
+        return [tf(name, sizeForName(name))];
       });
       const t = transfer({ direction: "send", state: "pending", files, peerId: target.id, peerName: target.name });
       transfers = [t, ...transfers].slice(0, 50);
-      log("info", "transfer", `Offering ${files.length} file(s) to ${target.name}`);
+      log("info", "transfer", `Offering ${files.length} item(s) to ${target.name}`);
       emit();
       setTimeout(() => {
         if (transfers.find((x) => x.id === t.id)?.state === "pending") startTransfer(t);
@@ -1065,12 +1079,14 @@ export function createMockBackend(): Backend {
       await sleep(400);
       return "D:\\Inbox";
     },
-    async respondTransfer(id, accept) {
+    async respondTransfer(id, accept, destination) {
       await sleep(120);
       const t = transfers.find((x) => x.id === id);
       if (!t || t.state !== "pending" || t.direction !== "receive") fail("This transfer is no longer waiting for an answer.");
-      if (accept) startTransfer(t);
-      else {
+      if (accept) {
+        if (destination) transfers = transfers.map((x) => (x.id === id ? { ...x, destination } : x));
+        startTransfer(t);
+      } else {
         transfers = transfers.map((x) => (x.id === id ? { ...x, state: "rejected", finishedAt: Date.now() } : x));
         emit();
       }
@@ -1231,12 +1247,17 @@ export function createMockBackend(): Backend {
       const t = transfer({
         direction: "receive",
         state: settings.transfer.askBeforeReceiving ? "pending" : "active",
-        files: [{ name: "Site-photos-batch-3.zip", size: 640 * MB }],
+        files: [
+          tf("Site-photos-batch-3/IMG_0001.jpg", 8 * MB),
+          tf("Site-photos-batch-3/IMG_0002.jpg", 9 * MB),
+          tf("Site-photos-batch-3/raw", 0, true),
+        ],
+        destination: DOWNLOADS,
         peerId: from.id,
         peerName: from.name,
       });
       transfers = [t, ...transfers].slice(0, 50);
-      log("info", "transfer", `${from.name} wants to send 1 file`);
+      log("info", "transfer", `${from.name} wants to send a folder`);
       emit();
     },
     simulateSharedText() {

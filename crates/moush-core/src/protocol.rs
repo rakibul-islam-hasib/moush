@@ -33,6 +33,9 @@ pub const MAX_FEATURE_BODY: usize = 32 * 1024;
 pub enum PeerRole {
     Host = 1,
     Client = 2,
+    /// A phone (or other pointer device) that controls the host's computer: it sends
+    /// relative movement, buttons, wheel and keys, which the host injects locally.
+    Remote = 3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -121,6 +124,11 @@ pub enum Message {
         button: MouseButton,
         down: bool,
     },
+    /// Remote -> host: relative pointer movement (touchpad style), in remote pixels.
+    MouseRel {
+        dx: i16,
+        dy: i16,
+    },
     Wheel {
         axis: WheelAxis,
         delta: i16,
@@ -172,6 +180,7 @@ impl fmt::Debug for Message {
             Message::MouseButton { button, down } => {
                 f.debug_struct("MouseButton").field("button", button).field("down", down).finish()
             }
+            Message::MouseRel { dx, dy } => f.debug_struct("MouseRel").field("dx", dx).field("dy", dy).finish(),
             Message::Wheel { axis, delta } => {
                 f.debug_struct("Wheel").field("axis", axis).field("delta", delta).finish()
             }
@@ -217,6 +226,7 @@ mod tag {
     pub const WHEEL: u8 = 14;
     pub const KEY: u8 = 15;
     pub const RELEASE_ALL: u8 = 16;
+    pub const MOUSE_REL: u8 = 17;
     pub const PING: u8 = 20;
     pub const PONG: u8 = 21;
     pub const CAPABILITIES: u8 = 30;
@@ -290,6 +300,11 @@ pub fn encode(msg: &Message, out: &mut Vec<u8>) {
             out.push(*button as u8);
             out.push(*down as u8);
         }
+        Message::MouseRel { dx, dy } => {
+            out.push(tag::MOUSE_REL);
+            out.extend_from_slice(&dx.to_le_bytes());
+            out.extend_from_slice(&dy.to_le_bytes());
+        }
         Message::Wheel { axis, delta } => {
             out.push(tag::WHEEL);
             out.push(*axis as u8);
@@ -354,6 +369,7 @@ fn decode_one(r: &mut Reader<'_>) -> Result<Message, DecodeError> {
             let role = match r.u8()? {
                 1 => PeerRole::Host,
                 2 => PeerRole::Client,
+                3 => PeerRole::Remote,
                 _ => return Err(DecodeError::Invalid("role")),
             };
             Message::Hello { version, role, name: r.string()?, trusts_peer: r.bool()? }
@@ -393,6 +409,7 @@ fn decode_one(r: &mut Reader<'_>) -> Result<Message, DecodeError> {
             let button = MouseButton::from_u8(r.u8()?).ok_or(DecodeError::Invalid("button"))?;
             Message::MouseButton { button, down: r.bool()? }
         }
+        tag::MOUSE_REL => Message::MouseRel { dx: r.i16()?, dy: r.i16()? },
         tag::WHEEL => {
             let axis = match r.u8()? {
                 0 => WheelAxis::Vertical,

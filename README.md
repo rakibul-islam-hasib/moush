@@ -39,8 +39,9 @@ settings format and UI may change before 1.0. macOS and Linux are not supported.
   computers. See [docs/KEYBOARD.md](docs/KEYBOARD.md).
 - **Shared clipboard.** Text, rich text and images copied on one computer paste on the
   others; sensitive clips (password managers) are skipped; optional in-memory history.
-- **File transfer.** Drag files onto the window: streamed, encrypted, integrity-checked,
-  resumable, with approval on the receiving side. Plus one-click sharing of text and links.
+- **File and folder transfer.** Drag files or folders onto the window: streamed,
+  encrypted, integrity-checked, resumable, with approval and a save-folder picker on the
+  receiving side. Plus one-click sharing of text and links.
 - **Configurable per device.** Every feature can be switched off globally or per paired
   device from the UI.
 - **Windows 11 look.** Fluent-inspired UI with Mica, light, dark and high-contrast themes,
@@ -129,6 +130,12 @@ moush-cli identity                       print this device's id and public key
 
 `scripts\e2e-local.ps1` runs a live end-to-end test on one machine (real GUI host with
 real hooks, dry-run client, synthetic input; see the script header).
+
+## Android
+
+The `mobile/` folder holds a phone remote: touchpad, keyboard, media deck, a remote screen
+viewer (pick a display, zoom, click) and file/folder sharing to the computer. See
+[mobile/README.md](mobile/README.md).
 
 ## Repository layout
 

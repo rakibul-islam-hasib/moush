@@ -138,6 +138,12 @@ pub struct DevicePolicyArg {
     clipboard: bool,
     files: bool,
     text_share: bool,
+    #[serde(default = "yes")]
+    screen: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Changes what a paired device may do (clipboard, files, shared text). Applies at once.
@@ -148,6 +154,7 @@ pub async fn set_device_policy(app: State<'_, Arc<App>>, device_id: String, poli
         clipboard: policy.clipboard,
         files: policy.files,
         text_share: policy.text_share,
+        screen: policy.screen,
     };
     blocking(move || app.set_device_policy(&device_id, p)).await
 }

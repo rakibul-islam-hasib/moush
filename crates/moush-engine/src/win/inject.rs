@@ -77,6 +77,11 @@ impl Injector for SendInputInjector {
         ))
     }
 
+    fn move_rel(&mut self, dx: i32, dy: i32) -> bool {
+        // Relative moves go through the system's pointer acceleration, like a real mouse.
+        send(mouse(dx, dy, 0, MOUSEEVENTF_MOVE))
+    }
+
     fn button(&mut self, button: MouseButton, down: bool) -> bool {
         let (flags, data) = match (button, down) {
             (MouseButton::Left, true) => (MOUSEEVENTF_LEFTDOWN, 0),

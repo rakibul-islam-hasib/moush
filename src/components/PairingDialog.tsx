@@ -37,7 +37,7 @@ function PairingRequestDialog({ request, more }: { request: PairingRequest; more
   };
 
   const title = request.needsMyApproval
-    ? request.peerRole === "client"
+    ? request.peerRole !== "host"
       ? `Allow ${peer} to connect?`
       : `Pair with ${peer}?`
     : `Waiting for ${peer}`;
@@ -66,11 +66,11 @@ function PairingRequestDialog({ request, more }: { request: PairingRequest; more
   return (
     <Dialog title={title} footer={footer} className="pairing-dialog">
       <div className="pairing-peer">
-        <Icon name={request.peerRole === "host" ? "desktop" : "laptop"} size={32} />
+        <Icon name={request.peerRole === "host" ? "desktop" : request.peerRole === "remote" ? "phone" : "laptop"} size={32} />
         <div>
           <div className="pairing-peer-name">{peer}</div>
           <div className="text-secondary">
-            {request.peerRole === "host" ? "Host" : "Client"} · {request.peerAddress}
+            {request.peerRole === "host" ? "Host" : request.peerRole === "remote" ? "Phone remote" : "Client"} · {request.peerAddress}
           </div>
         </div>
       </div>

@@ -16,6 +16,8 @@ use crate::util::now_ms;
 pub enum TrustRole {
     Host,
     Client,
+    /// A phone controlling this computer.
+    Remote,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

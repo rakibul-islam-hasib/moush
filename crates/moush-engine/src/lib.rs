@@ -13,6 +13,7 @@ pub mod identity;
 pub mod layout;
 pub mod logger;
 pub mod paths;
+pub mod screen;
 pub mod transfer;
 pub mod win;
 

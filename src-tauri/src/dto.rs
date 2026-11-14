@@ -164,8 +164,12 @@ pub struct ClipboardStatus {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferFile {
+    /// The last path component.
     pub name: String,
+    /// Path relative to the transfer root; an empty folder is marked by `is_dir`.
+    pub path: String,
     pub size: u64,
+    pub is_dir: bool,
 }
 
 #[derive(Clone, Serialize)]

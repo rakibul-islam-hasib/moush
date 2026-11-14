@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 pub mod channel {
     pub const CLIPBOARD: u8 = 1;
     pub const FILES: u8 = 2;
+    pub const SCREEN: u8 = 3;
 }
 
 /// Capability bits of [`Message::Capabilities`](crate::protocol::Message::Capabilities).
@@ -23,6 +24,8 @@ pub mod cap {
     pub const FILES: u32 = 1 << 1;
     /// The sender accepts manually shared text, links and snippets.
     pub const TEXT_SHARE: u32 = 1 << 2;
+    /// The sender lets this peer watch its screen (only ever offered to phone remotes).
+    pub const SCREEN: u32 = 1 << 3;
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,11 +202,13 @@ pub struct DevicePolicy {
     pub clipboard: bool,
     pub files: bool,
     pub text_share: bool,
+    /// A paired phone remote may watch this computer's screen.
+    pub screen: bool,
 }
 
 impl Default for DevicePolicy {
     fn default() -> Self {
-        Self { clipboard: true, files: true, text_share: true }
+        Self { clipboard: true, files: true, text_share: true, screen: true }
     }
 }
 
@@ -218,6 +223,9 @@ pub fn local_caps(clipboard: &ClipboardSettings, transfer: &TransferSettings, po
     }
     if policy.text_share {
         caps |= cap::TEXT_SHARE;
+    }
+    if policy.screen {
+        caps |= cap::SCREEN;
     }
     caps
 }
@@ -258,13 +266,13 @@ mod tests {
         let c = ClipboardSettings::default();
         let t = TransferSettings::default();
         let all = local_caps(&c, &t, &DevicePolicy::default());
-        assert_eq!(all, cap::CLIPBOARD | cap::FILES | cap::TEXT_SHARE);
+        assert_eq!(all, cap::CLIPBOARD | cap::FILES | cap::TEXT_SHARE | cap::SCREEN);
         let off = local_caps(
             &ClipboardSettings { enabled: false, ..c },
             &t,
             &DevicePolicy { files: false, ..Default::default() },
         );
-        assert_eq!(off, cap::TEXT_SHARE);
+        assert_eq!(off, cap::TEXT_SHARE | cap::SCREEN);
     }
 
     #[test]

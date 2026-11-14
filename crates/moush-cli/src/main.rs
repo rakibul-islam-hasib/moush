@@ -44,6 +44,7 @@ struct Args {
     dry_run: bool,
     verbose: bool,
     config_dir: Option<PathBuf>,
+    receive_dir: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -55,6 +56,7 @@ fn parse_args() -> Result<Args, String> {
         dry_run: false,
         verbose: false,
         config_dir: None,
+        receive_dir: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -63,6 +65,7 @@ fn parse_args() -> Result<Args, String> {
             "--events" => a.events = it.next().and_then(|v| v.parse().ok()).ok_or("--events needs a number")?,
             "--dry-run" => a.dry_run = true,
             "--verbose" | "-v" => a.verbose = true,
+            "--receive-dir" => a.receive_dir = Some(it.next().ok_or("--receive-dir needs a path")?.into()),
             "--config-dir" => a.config_dir = Some(it.next().ok_or("--config-dir needs a path")?.into()),
             "-h" | "--help" => a.cmd = "help".into(),
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
@@ -220,6 +223,28 @@ fn wait_for_enter() {
 fn cmd_host(args: &Args) -> Result<(), String> {
     let (id, trust) = load_identity_and_trust(args)?;
     let stats = Arc::new(Stats::new());
+    let hub = moush_engine::features::FeatureHub::new();
+    // Headless file receiving (also used by the phone-app tests): files from paired devices
+    // are accepted automatically into the given folder.
+    {
+        use moush_engine::core::features::cap;
+        // Phone remotes may watch the screen; files only when a receive folder is given.
+        let caps = cap::SCREEN | if args.receive_dir.is_some() { cap::FILES } else { 0 };
+        hub.set_policy(move |_| caps);
+    }
+    let _transfers = args.receive_dir.as_ref().map(|dir| {
+        let svc = moush_engine::transfer::TransferService::new(dir.clone());
+        let settings = moush_engine::core::features::TransferSettings {
+            enabled: true,
+            download_dir: dir.display().to_string(),
+            ask_before_receiving: false,
+            ..Default::default()
+        };
+        svc.set_handlers(move || settings.clone(), |e| println!("transfer: {e:?}"));
+        svc.attach(&hub);
+        println!("receiving files into {}", dir.display());
+        svc
+    });
     let engine = HostEngine::start(
         HostOptions {
             port: args.port,
@@ -232,7 +257,7 @@ fn cmd_host(args: &Args) -> Result<(), String> {
         trust,
         stdin_broker(),
         stats.clone(),
-        moush_engine::features::FeatureHub::new(),
+        hub,
         Arc::new(|| {}),
     )
     .map_err(|e| e.to_string())?;

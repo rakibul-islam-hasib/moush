@@ -66,6 +66,7 @@ const POLICY_ROWS: { key: keyof DevicePolicy; title: string; desc: (name: string
   { key: "clipboard", title: "Clipboard sync", desc: (n) => `Share copied text and images with ${n}.`, icon: "clipboard" },
   { key: "files", title: "File transfer", desc: (n) => `Send files to ${n} and accept files from it.`, icon: "transfer" },
   { key: "textShare", title: "Shared text and links", desc: (n) => `Exchange texts, links and snippets with ${n}.`, icon: "note" },
+  { key: "screen", title: "Screen viewing", desc: (n) => `Let ${n} watch this screen and click on it.`, icon: "desktop" },
 ];
 
 /** A paired device with its permissions. Policy changes are optimistic and roll back on error. */
@@ -92,7 +93,7 @@ const PairedDevice = memo(function PairedDevice({ device, peer, onForget }: { de
   const allowed = CAPS.filter((c) => policy[c.key]).map((c) => c.label.toLowerCase());
   return (
     <Expander
-      icon={device.role === "host" ? "desktop" : "laptop"}
+      icon={device.role === "host" ? "desktop" : device.role === "remote" ? "phone" : "laptop"}
       title={
         <span className="title-with-badge">
           {device.name}
@@ -109,7 +110,7 @@ const PairedDevice = memo(function PairedDevice({ device, peer, onForget }: { de
         </>
       }
     >
-      {POLICY_ROWS.map((row) => (
+      {POLICY_ROWS.filter((row) => row.key !== "screen" || device.role === "remote").map((row) => (
         <ExpanderRow key={row.key} title={row.title} description={row.desc(device.name)}>
           {(ids) => <ToggleSwitch checked={policy[row.key]} onChange={(v) => set(row.key, v)} labelledBy={ids.label} describedBy={ids.desc} />}
         </ExpanderRow>
