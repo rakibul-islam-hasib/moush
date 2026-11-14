@@ -56,21 +56,22 @@ fun NavBar(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, modifie
         w
     }
     val total = weights.sum()
-    // A soft fade keeps scrolling content from colliding with the floating bar.
+    val barColor = if (p.dark) p.surfaceHigh else p.surface
+    // A flat strip in the page colour: content ends cleanly above the bar.
     Box(
         modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, p.bg.copy(alpha = 0.92f), p.bg)))
-            .padding(top = 28.dp)
+            .background(p.bg)
+            .padding(top = 10.dp)
             .navigationBarsPadding()
-            .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
+            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
     ) {
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .height(66.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(if (p.dark) p.surfaceTop else p.surface)
+                .height(64.dp)
+                .clip(CircleShape)
+                .background(barColor)
                 .padding(6.dp),
         ) {
             val innerW = maxWidth
@@ -83,13 +84,13 @@ fun NavBar(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, modifie
                     .offset(x = x)
                     .width(w)
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(21.dp))
-                    .background(Brush.horizontalGradient(listOf(p.accent.copy(alpha = 0.26f), p.accentAlt.copy(alpha = 0.16f)))),
+                    .clip(CircleShape)
+                    .background(p.accent),
             )
             Row(Modifier.fillMaxSize()) {
                 items.forEachIndexed { i, item ->
                     val reveal = ((weights[i] - 1f) / 1.5f).coerceIn(0f, 1f)
-                    val tint = lerpColor(p.textDim, p.text, reveal)
+                    val tint = lerpColor(p.textDim, p.onAccent, reveal)
                     Box(
                         Modifier
                             .weight(weights[i])
@@ -99,16 +100,23 @@ fun NavBar(items: List<NavItem>, selected: Int, onSelect: (Int) -> Unit, modifie
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box {
-                                MIcon(item.icon, tint = lerpColor(p.textDim, p.accent, reveal), size = 24.dp)
+                                MIcon(item.icon, tint = tint, size = 24.dp)
                                 if (item.badge != BadgeKind.None) {
+                                    // A dot with a ring in the colour behind it, so it reads as a cut-out.
                                     Box(
                                         Modifier
                                             .align(Alignment.TopEnd)
-                                            .offset(x = 3.dp, y = (-2).dp)
-                                            .size(8.dp)
+                                            .offset(x = 5.dp, y = (-4).dp)
+                                            .size(12.dp)
                                             .clip(CircleShape)
-                                            .background(if (item.badge == BadgeKind.Online) p.ok else p.accentAlt),
-                                    )
+                                            .background(lerpColor(barColor, p.accent, reveal)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Box(
+                                            Modifier.size(7.dp).clip(CircleShape)
+                                                .background(if (item.badge == BadgeKind.Online) p.ok else p.accentAlt),
+                                        )
+                                    }
                                 }
                             }
                             if (reveal > 0.02f) {
